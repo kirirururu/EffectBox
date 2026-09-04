@@ -218,10 +218,10 @@ void PluginGraph::newDocument()
 
 	jassert(internalFormat.getAllTypes().size() > 3);
 
-	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[0]}, {0.5, 0.1});
-	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[1]}, {0.25, 0.1});
-	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[2]}, {0.5, 0.9});
-	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[3]}, {0.25, 0.9});
+	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[0]}, {0.1, 0.5});
+	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[1]}, {0.1, 0.25});
+	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[2]}, {0.9, 0.5});
+	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[3]}, {0.9, 0.25});
 
 	MessageManager::callAsync(
 	    [this]

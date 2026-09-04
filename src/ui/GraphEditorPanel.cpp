@@ -142,7 +142,7 @@ struct GraphEditorPanel::PinComponent final : public Component, public SettableT
 
 		Path p;
 		p.addEllipse(w * 0.25f, h * 0.25f, w * 0.5f, h * 0.5f);
-		p.addRectangle(w * 0.4f, isInput ? (0.5f * h) : 0.0f, w * 0.2f, h * 0.5f);
+		p.addRectangle(isInput ? (0.5f * w) : 0.0f, h * 0.4f, w * 0.5f, h * 0.2f);
 
 		auto colour = (pin.isMIDI() ? Colours::red : Colours::green);
 
@@ -273,12 +273,12 @@ struct GraphEditorPanel::PluginComponent final : public Component,
 			if (child->getBounds().contains(x, y))
 				return true;
 
-		return x >= 3 && x < getWidth() - 6 && y >= pinSize && y < getHeight() - pinSize;
+		return x >= pinSize && x < getWidth() - pinSize && y >= 3 && y < getHeight() - 6;
 	}
 
 	void paint(Graphics& g) override
 	{
-		auto boxArea = getLocalBounds().reduced(4, pinSize);
+		auto boxArea = getLocalBounds().reduced(pinSize, 4);
 		bool isBypassed = false;
 
 		if (auto* f = graph.graph.getNodeForId(pluginID))
@@ -319,9 +319,10 @@ struct GraphEditorPanel::PluginComponent final : public Component,
 					    (static_cast<float>(jmax(0, processor->getBusCount(isInput) - 1)) * 0.5f);
 					auto indexPos = static_cast<float>(index) + (static_cast<float>(busIdx) * 0.5f);
 
-					pin->setBounds(proportionOfWidth((1.0f + indexPos) / (totalSpaces + 1.0f)) -
+					pin->setBounds(pin->isInput ? 0 : (getWidth() - pinSize),
+					               proportionOfHeight((1.0f + indexPos) / (totalSpaces + 1.0f)) -
 					                   pinSize / 2,
-					               pin->isInput ? 0 : (getHeight() - pinSize), pinSize, pinSize);
+					               pinSize, pinSize);
 				}
 			}
 		}
@@ -354,12 +355,12 @@ struct GraphEditorPanel::PluginComponent final : public Component,
 		int w = 100;
 		int h = 60;
 
-		w = jmax(w, (jmax(numIns, numOuts) + 1) * 20);
+		h = jmax(h, (jmax(numIns, numOuts) + 1) * 20);
 
 		const auto textWidth = GlyphArrangement::getStringWidthInt(font, processor.getName());
 		w = jmax(w, 16 + jmin(textWidth, 300));
 		if (textWidth > 300)
-			h = 100;
+			h = jmax(h, 100);
 
 		setSize(w, h);
 		setName(processor.getName() + formatSuffix);
@@ -708,7 +709,7 @@ struct GraphEditorPanel::ConnectorComponent final : public Component, public Set
 
 		linePath.clear();
 		linePath.startNewSubPath(p1);
-		linePath.cubicTo(p1.x, p1.y + (p2.y - p1.y) * 0.33f, p2.x, p1.y + (p2.y - p1.y) * 0.66f,
+		linePath.cubicTo(p1.x + (p2.x - p1.x) * 0.33f, p1.y, p1.x + (p2.x - p1.x) * 0.66f, p2.y,
 		                 p2.x, p2.y);
 
 		PathStrokeType wideStroke(8.0f);
