@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include "IOPanels.h"
 #include "plugins/PluginGraph.h"
 
 class MainHostWindow;
@@ -152,6 +153,12 @@ private:
 
 	AudioProcessorPlayer graphPlayer;
 	MidiOutput* midiOutput = nullptr;
+
+	std::unique_ptr<IOPanelComponent> inputPanel;
+	std::unique_ptr<IOPanelComponent> outputPanel;
+
+	static constexpr int ioPanelWidth = 140;
+	static constexpr int defaultNumEndpoints = 2;
 
 	struct TooltipBar;
 	std::unique_ptr<TooltipBar> statusBar;

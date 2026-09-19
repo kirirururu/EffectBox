@@ -1244,6 +1244,22 @@ void GraphDocumentComponent::init()
 	addAndMakeVisible(graphPanel.get());
 	graphPlayer.setProcessor(&graph->graph);
 
+	{
+		StringArray inputNames, outputNames;
+
+		for (int i = 1; i <= defaultNumEndpoints; ++i)
+		{
+			inputNames.add("Input " + String(i));
+			outputNames.add("Output " + String(i));
+		}
+
+		inputPanel.reset(new IOPanelComponent("Inputs", true, inputNames, ioPanelWidth));
+		addAndMakeVisible(inputPanel.get());
+
+		outputPanel.reset(new IOPanelComponent("Outputs", false, outputNames, ioPanelWidth));
+		addAndMakeVisible(outputPanel.get());
+	}
+
 	statusBar.reset(new TooltipBar());
 	addAndMakeVisible(statusBar.get());
 
@@ -1296,6 +1312,8 @@ void GraphDocumentComponent::resized()
 		titleBarComponent->setBounds(r.removeFromTop(titleBarHeight));
 
 	statusBar->setBounds(r.removeFromBottom(statusHeight));
+	inputPanel->setBounds(r.removeFromLeft(ioPanelWidth + IOPanelComponent::portOverhang));
+	outputPanel->setBounds(r.removeFromRight(ioPanelWidth + IOPanelComponent::portOverhang));
 	graphPanel->setBounds(r);
 
 	checkAvailableWidth();
@@ -1319,6 +1337,8 @@ void GraphDocumentComponent::releaseGraph()
 	}
 
 	statusBar = nullptr;
+	inputPanel = nullptr;
+	outputPanel = nullptr;
 
 	graphPlayer.setProcessor(nullptr);
 	graph = nullptr;
