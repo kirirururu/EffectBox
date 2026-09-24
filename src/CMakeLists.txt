@@ -12,7 +12,6 @@ juce_add_gui_app(EffectBox
 juce_generate_juce_header(EffectBox)
 
 target_sources(EffectBox PRIVATE
-	plugins/ARAPlugin.cpp
 	plugins/IOConfigurationWindow.cpp
 	plugins/InternalPlugins.cpp
 	plugins/PluginGraph.cpp
@@ -43,7 +42,6 @@ target_compile_definitions(EffectBox PRIVATE
 	JUCE_PLUGINHOST_LV2=1
 	JUCE_PLUGINHOST_VST3=1
 	JUCE_PLUGINHOST_VST=0
-	JUCE_PLUGINHOST_ARA=0
 	JUCE_VST3_HOST_CROSS_PLATFORM_UID=1
 
 	JUCE_USE_CAMERA=0

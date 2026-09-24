@@ -341,14 +341,6 @@ struct GraphEditorPanel::PluginComponent final : public Component,
 		return {};
 	}
 
-	bool isNodeUsingARA() const
-	{
-		if (auto node = graph.graph.getNodeForId(pluginID))
-			return node->properties["useARA"];
-
-		return false;
-	}
-
 	void showPopupMenu(Point<int> localPos)
 	{
 		menu.reset(new PopupMenu);
@@ -370,13 +362,6 @@ struct GraphEditorPanel::PluginComponent final : public Component,
 		menu->addItem("Show all programs", [this] { showWindow(PluginWindow::Type::programs); });
 		menu->addItem("Show all parameters", [this] { showWindow(PluginWindow::Type::generic); });
 		menu->addItem("Show debug log", [this] { showWindow(PluginWindow::Type::debug); });
-
-#if JUCE_PLUGINHOST_ARA
-		if (auto* instance = dynamic_cast<AudioPluginInstance*>(getProcessor()))
-			if (instance->getPluginDescription().hasARAExtension && isNodeUsingARA())
-				menu->addItem("Show ARA host controls",
-				              [this] { showWindow(PluginWindow::Type::araHost); });
-#endif
 
 		if (autoScaleOptionAvailable)
 			addPluginAutoScaleOptionsSubMenu(dynamic_cast<AudioPluginInstance*>(getProcessor()),

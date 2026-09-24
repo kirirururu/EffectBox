@@ -676,16 +676,7 @@ static void addToMenu(const KnownPluginList::PluginTree& tree,
 		if (containsDuplicateNames(tree.plugins, name))
 			name << " (" << plugin.pluginFormatName << ')';
 
-		addPlugin(PluginDescriptionAndPreference{plugin, PluginDescriptionAndPreference::UseARA::no},
-		          name);
-
-#if JUCE_PLUGINHOST_ARA
-		if (plugin.hasARAExtension)
-		{
-			name << " (ARA)";
-			addPlugin(PluginDescriptionAndPreference{plugin}, name);
-		}
-#endif
+		addPlugin(PluginDescriptionAndPreference{plugin}, name);
 	}
 }
 

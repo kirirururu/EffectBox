@@ -94,15 +94,13 @@ void PluginGraph::addPlugin(const PluginDescriptionAndPreference& desc, Point<do
 
 	formatManager.createPluginInstanceAsync(
 	    desc.pluginDescription, graph.getSampleRate(), graph.getBlockSize(),
-	    [this, pos, dpiDisabler,
-	     useARA = desc.useARA](std::unique_ptr<AudioPluginInstance> instance, const String& error)
-	    { addPluginCallback(std::move(instance), error, pos, useARA); });
+	    [this, pos, dpiDisabler](std::unique_ptr<AudioPluginInstance> instance, const String& error)
+	    { addPluginCallback(std::move(instance), error, pos); });
 }
 
 void PluginGraph::addPluginCallback(std::unique_ptr<AudioPluginInstance> instance,
                                     const String& error,
-                                    Point<double> pos,
-                                    PluginDescriptionAndPreference::UseARA useARA)
+                                    Point<double> pos)
 {
 	if (instance == nullptr)
 	{
@@ -112,21 +110,12 @@ void PluginGraph::addPluginCallback(std::unique_ptr<AudioPluginInstance> instanc
 	}
 	else
 	{
-#if JUCE_PLUGINHOST_ARA
-		if (useARA == PluginDescriptionAndPreference::UseARA::yes &&
-		    instance->getPluginDescription().hasARAExtension)
-		{
-			instance = std::make_unique<ARAPluginInstanceWrapper>(std::move(instance));
-		}
-#endif
-
 		instance->enableAllBuses();
 
 		if (auto node = graph.addNode(std::move(instance)))
 		{
 			node->properties.set("x", pos.x);
 			node->properties.set("y", pos.y);
-			node->properties.set("useARA", useARA == PluginDescriptionAndPreference::UseARA::yes);
 			changed();
 		}
 	}
@@ -436,7 +425,6 @@ static XmlElement* createNodeXml(AudioProcessorGraph::Node* const node) noexcept
 		e->setAttribute("uid", (int)node->nodeID.uid);
 		e->setAttribute("x", node->properties["x"].toString());
 		e->setAttribute("y", node->properties["y"].toString());
-		e->setAttribute("useARA", node->properties["useARA"].toString());
 
 		for (int i = 0; i < (int)PluginWindow::Type::numTypes; ++i)
 		{
@@ -481,16 +469,11 @@ static XmlElement* createNodeXml(AudioProcessorGraph::Node* const node) noexcept
 void PluginGraph::createNodeFromXml(const XmlElement& xml)
 {
 	PluginDescriptionAndPreference pd;
-	const auto nodeUsesARA = xml.getBoolAttribute("useARA");
 
 	for (auto* e : xml.getChildIterator())
 	{
 		if (pd.pluginDescription.loadFromXml(*e))
-		{
-			pd.useARA = nodeUsesARA ? PluginDescriptionAndPreference::UseARA::yes
-			                        : PluginDescriptionAndPreference::UseARA::no;
 			break;
-		}
 	}
 
 	auto createInstanceWithFallback = [&]() -> std::unique_ptr<AudioPluginInstance>
@@ -505,14 +488,6 @@ void PluginGraph::createNodeFromXml(const XmlElement& xml)
 			auto instance = formatManager.createPluginInstance(description.pluginDescription,
 			                                                   graph.getSampleRate(),
 			                                                   graph.getBlockSize(), errorMessage);
-
-#if JUCE_PLUGINHOST_ARA
-			if (instance && description.useARA == PluginDescriptionAndPreference::UseARA::yes &&
-			    description.pluginDescription.hasARAExtension)
-			{
-				return std::make_unique<ARAPluginInstanceWrapper>(std::move(instance));
-			}
-#endif
 
 			return instance;
 		};
@@ -564,7 +539,6 @@ void PluginGraph::createNodeFromXml(const XmlElement& xml)
 
 			node->properties.set("x", xml.getDoubleAttribute("x"));
 			node->properties.set("y", xml.getDoubleAttribute("y"));
-			node->properties.set("useARA", xml.getBoolAttribute("useARA"));
 
 			for (int i = 0; i < (int)PluginWindow::Type::numTypes; ++i)
 			{

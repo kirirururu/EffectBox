@@ -42,28 +42,14 @@
 */
 struct PluginDescriptionAndPreference
 {
-	enum class UseARA
-	{
-		no,
-		yes
-	};
-
 	PluginDescriptionAndPreference() = default;
 
 	explicit PluginDescriptionAndPreference(PluginDescription pd)
-	    : pluginDescription(std::move(pd)),
-	      useARA(pluginDescription.hasARAExtension ? PluginDescriptionAndPreference::UseARA::yes
-	                                               : PluginDescriptionAndPreference::UseARA::no)
-	{
-	}
-
-	PluginDescriptionAndPreference(PluginDescription pd, UseARA ara)
-	    : pluginDescription(std::move(pd)), useARA(ara)
+	    : pluginDescription(std::move(pd))
 	{
 	}
 
 	PluginDescription pluginDescription;
-	UseARA useARA = UseARA::no;
 };
 
 //==============================================================================
@@ -170,8 +156,7 @@ private:
 	void createNodeFromXml(const XmlElement&);
 	void addPluginCallback(std::unique_ptr<AudioPluginInstance>,
 	                       const String& error,
-	                       Point<double>,
-	                       PluginDescriptionAndPreference::UseARA useARA);
+	                       Point<double>);
 
 	//==============================================================================
 	std::vector<GraphIOEndpoint>& ioVector(bool isInput) { return isInput ? inputs : outputs; }
