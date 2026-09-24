@@ -36,6 +36,7 @@
 #include <JuceHeader.h>
 
 #include "plugins/InternalPlugins.h"
+#include "ui/GraphIOEditor.h"
 
 constexpr const char* scanModeKey = "pluginScanMode";
 
@@ -567,6 +568,7 @@ PopupMenu MainHostWindow::getMenuForIndex(int topLevelMenuIndex, const String& /
 		menu.addSubMenu("Plug-in Menu Type", sortTypeMenu);
 
 		menu.addSeparator();
+		menu.addCommandItem(&getCommandManager(), CommandIDs::showGraphIO);
 		menu.addCommandItem(&getCommandManager(), CommandIDs::showAudioSettings);
 		menu.addCommandItem(&getCommandManager(), CommandIDs::toggleDoublePrecision);
 
@@ -765,6 +767,7 @@ void MainHostWindow::getAllCommands(Array<CommandID>& commands)
 	    CommandIDs::saveAs,
 #endif
 	    CommandIDs::showPluginListEditor,
+	    CommandIDs::showGraphIO,
 	    CommandIDs::showAudioSettings,
 	    CommandIDs::toggleDoublePrecision,
 	    CommandIDs::aboutBox,
@@ -806,6 +809,11 @@ void MainHostWindow::getCommandInfo(const CommandID commandID, ApplicationComman
 	case CommandIDs::showPluginListEditor:
 		result.setInfo("Edit the List of Available Plug-ins...", {}, category, 0);
 		result.addDefaultKeypress('p', ModifierKeys::commandModifier);
+		break;
+
+	case CommandIDs::showGraphIO:
+		result.setInfo("Edit Graph Inputs/Outputs...",
+		               "Adds, removes and edits the inputs and outputs of the graph", category, 0);
 		break;
 
 	case CommandIDs::showAudioSettings:
@@ -895,6 +903,10 @@ bool MainHostWindow::perform(const InvocationInfo& info)
 		showAudioSettings();
 		break;
 
+	case CommandIDs::showGraphIO:
+		showGraphIOEditor();
+		break;
+
 	case CommandIDs::toggleDoublePrecision:
 		if (auto* props = getAppProperties().getUserSettings())
 		{
@@ -977,6 +989,27 @@ void MainHostWindow::showAudioSettings()
 				        safeThis->graphHolder->graph->graph.removeIllegalConnections();
 	        }),
 	    true);
+}
+
+void MainHostWindow::showGraphIOEditor()
+{
+	if (graphHolder == nullptr || graphHolder->graph == nullptr)
+		return;
+
+	auto* editor = new GraphIOEditor(*graphHolder->graph);
+	editor->setSize(540, 420);
+
+	DialogWindow::LaunchOptions o;
+	o.content.setOwned(editor);
+	o.dialogTitle = "Graph Inputs/Outputs";
+	o.componentToCentreAround = this;
+	o.dialogBackgroundColour = getLookAndFeel().findColour(ResizableWindow::backgroundColourId);
+	o.escapeKeyTriggersCloseButton = true;
+	o.useNativeTitleBar = false;
+	o.resizable = false;
+
+	auto* w = o.create();
+	w->enterModalState(true, ModalCallbackFunction::create([](int) { }), true);
 }
 
 bool MainHostWindow::isInterestedInFileDrag(const StringArray&)

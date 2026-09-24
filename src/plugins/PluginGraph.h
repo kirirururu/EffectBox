@@ -68,6 +68,23 @@ struct PluginDescriptionAndPreference
 
 //==============================================================================
 /**
+    A single input or output endpoint of a plugin graph.
+
+    Each endpoint has a unique identifier (generated automatically when the
+    endpoint is created), a display name, and a channel count of either 1
+    (mono) or 2 (stereo).
+*/
+struct GraphIOEndpoint
+{
+	GraphIOEndpoint() = default;
+
+	Uuid id;
+	String name;
+	int numChannels = 1;
+};
+
+//==============================================================================
+/**
     A collection of plugins and some connections between them.
 */
 class PluginGraph final : public FileBasedDocument, public AudioProcessorListener, private ChangeListener
@@ -86,6 +103,19 @@ public:
 
 	void setNodePosition(NodeID, Point<double>);
 	Point<double> getNodePosition(NodeID) const;
+
+	//==============================================================================
+	/** Adds a new input or output endpoint with a freshly generated UUID.
+
+	    @param numChannels  Either 1 (mono) or 2 (stereo); any other value
+	                       is treated as mono.
+	*/
+	Uuid addIOEndpoint(const String& name, int numChannels, bool isInput);
+	void removeIOEndpoint(const Uuid& id, bool isInput);
+	void setIOEndpointName(const Uuid& id, const String& name, bool isInput);
+	void setIOEndpointChannels(const Uuid& id, int numChannels, bool isInput);
+	GraphIOEndpoint* findIOEndpoint(const Uuid& id, bool isInput);
+	int indexOfIOEndpoint(const Uuid& id, bool isInput);
 
 	//==============================================================================
 	void clear();
@@ -115,6 +145,11 @@ public:
 	//==============================================================================
 	AudioProcessorGraph graph;
 
+	//==============================================================================
+	/** The system inputs and outputs of the graph, in display order. */
+	std::vector<GraphIOEndpoint> inputs;
+	std::vector<GraphIOEndpoint> outputs;
+
 protected:
 	String getDocumentTitle() override;
 	Result loadDocument(const File& file) override;
@@ -137,6 +172,16 @@ private:
 	                       const String& error,
 	                       Point<double>,
 	                       PluginDescriptionAndPreference::UseARA useARA);
+
+	//==============================================================================
+	std::vector<GraphIOEndpoint>& ioVector(bool isInput) { return isInput ? inputs : outputs; }
+	const std::vector<GraphIOEndpoint>& ioVector(bool isInput) const
+	{
+		return isInput ? inputs : outputs;
+	}
+	void seedDefaultIO();
+
+	static constexpr int defaultNumIOEndpoints = 2;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginGraph)
 };

@@ -27,7 +27,8 @@ void IOPortComponent::paint(Graphics& g)
 }
 
 //==============================================================================
-IOEndpointComponent::IOEndpointComponent(String name) : endpointName(std::move(name))
+IOEndpointComponent::IOEndpointComponent(String name, int channels)
+    : endpointName(std::move(name)), numChannels(channels)
 {
 	setSize(120, 36);
 }
@@ -35,8 +36,12 @@ IOEndpointComponent::IOEndpointComponent(String name) : endpointName(std::move(n
 void IOEndpointComponent::paint(Graphics& g)
 {
 	g.setColour(findColour(TextEditor::textColourId));
-	g.setFont(font);
-	g.drawFittedText(endpointName, textArea, Justification::centred, 2);
+	g.setFont(nameFont);
+	g.drawFittedText(endpointName, nameArea, Justification::centredLeft, 2);
+
+	g.setColour(findColour(TextEditor::textColourId).withAlpha(0.6f));
+	g.setFont(channelFont);
+	g.drawText(numChannels == 2 ? "Stereo" : "Mono", channelArea, Justification::centredLeft, 1);
 
 	g.setColour(Colours::black.withAlpha(0.4f));
 	g.fillRect(0, getHeight() - 1, getWidth(), 1);
@@ -44,27 +49,45 @@ void IOEndpointComponent::paint(Graphics& g)
 
 void IOEndpointComponent::resized()
 {
-	textArea = getLocalBounds().reduced(4, 0);
+	auto area = getLocalBounds().reduced(6, 4);
+	nameArea = area.removeFromTop((int)(area.getHeight() * 0.55f));
+	channelArea = area;
 }
 
 //==============================================================================
-IOPanelComponent::IOPanelComponent(String title, bool in, const StringArray& names, int visibleWidthIn)
+IOPanelComponent::IOPanelComponent(String title, bool in, int visibleWidthIn)
     : panelTitle(std::move(title)), isInput(in), visibleWidth(visibleWidthIn)
 {
 	titleLabel.setText(panelTitle, NotificationType::dontSendNotification);
 	titleLabel.setJustificationType(Justification::centred);
 	addAndMakeVisible(titleLabel);
 
-	for (const auto& name : names)
-	{
-		addAndMakeVisible(endpoints.add(new IOEndpointComponent(name)));
+	setSize(visibleWidth + portOverhang, 100);
+}
 
-		auto* port = ports.add(new IOPortComponent(in));
-		port->setTooltip(name + (in ? " (input)" : " (output)"));
+void IOPanelComponent::setEndpoints(const StringArray& names, const Array<int>& channels)
+{
+	if (names == lastNames && channels == lastChannels)
+		return;
+
+	lastNames = names;
+	lastChannels = channels;
+
+	endpoints.clear();
+	ports.clear();
+
+	for (int i = 0; i < names.size(); ++i)
+	{
+		const int numChannels = isPositiveAndBelow(i, channels.size()) ? channels[i] : 1;
+		addAndMakeVisible(endpoints.add(new IOEndpointComponent(names[i], numChannels)));
+
+		auto* port = ports.add(new IOPortComponent(isInput));
+		port->setTooltip(names[i] + (isInput ? " (input)" : " (output)"));
 		addAndMakeVisible(port);
 	}
 
-	setSize(visibleWidth + portOverhang, 100);
+	resized();
+	repaint();
 }
 
 void IOPanelComponent::paint(Graphics& g)

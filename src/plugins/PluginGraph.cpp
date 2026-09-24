@@ -150,6 +150,92 @@ Point<double> PluginGraph::getNodePosition(NodeID nodeID) const
 }
 
 //==============================================================================
+Uuid PluginGraph::addIOEndpoint(const String& name, int numChannels, bool isInput)
+{
+	GraphIOEndpoint e;
+	e.id = Uuid();
+	e.name = name;
+	e.numChannels = (numChannels == 2) ? 2 : 1;
+
+	ioVector(isInput).push_back(e);
+	changed();
+
+	return e.id;
+}
+
+void PluginGraph::removeIOEndpoint(const Uuid& id, bool isInput)
+{
+	auto& v = ioVector(isInput);
+
+	for (int i = v.size(); --i >= 0;)
+		if (v[(size_t)i].id == id)
+			v.erase(v.begin() + i);
+
+	changed();
+}
+
+void PluginGraph::setIOEndpointName(const Uuid& id, const String& name, bool isInput)
+{
+	if (auto* e = findIOEndpoint(id, isInput))
+	{
+		e->name = name;
+		changed();
+	}
+}
+
+void PluginGraph::setIOEndpointChannels(const Uuid& id, int numChannels, bool isInput)
+{
+	if (auto* e = findIOEndpoint(id, isInput))
+	{
+		e->numChannels = (numChannels == 2) ? 2 : 1;
+		changed();
+	}
+}
+
+GraphIOEndpoint* PluginGraph::findIOEndpoint(const Uuid& id, bool isInput)
+{
+	for (auto& e : ioVector(isInput))
+		if (e.id == id)
+			return &e;
+
+	return nullptr;
+}
+
+int PluginGraph::indexOfIOEndpoint(const Uuid& id, bool isInput)
+{
+	const auto& v = ioVector(isInput);
+
+	for (int i = 0; i < v.size(); ++i)
+		if (v[(size_t)i].id == id)
+			return i;
+
+	return -1;
+}
+
+void PluginGraph::seedDefaultIO()
+{
+	inputs.clear();
+	outputs.clear();
+
+	for (int i = 1; i <= defaultNumIOEndpoints; ++i)
+	{
+		GraphIOEndpoint in, out;
+		in.id = Uuid();
+		in.name = "Input " + String(i);
+		in.numChannels = 1;
+
+		out.id = Uuid();
+		out.name = "Output " + String(i);
+		out.numChannels = 1;
+
+		inputs.push_back(in);
+		outputs.push_back(out);
+	}
+
+	changed();
+}
+
+//==============================================================================
 void PluginGraph::clear()
 {
 	closeAnyOpenPluginWindows();
@@ -222,6 +308,8 @@ void PluginGraph::newDocument()
 	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[1]}, {0.1, 0.25});
 	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[2]}, {0.9, 0.5});
 	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[3]}, {0.9, 0.25});
+
+	seedDefaultIO();
 
 	MessageManager::callAsync(
 	    [this]
@@ -508,6 +596,16 @@ void PluginGraph::createNodeFromXml(const XmlElement& xml)
 	}
 }
 
+static GraphIOEndpoint ioEndpointFromXml(const XmlElement& e)
+{
+	GraphIOEndpoint endpoint;
+	endpoint.id = Uuid(e.getStringAttribute("id"));
+	endpoint.name = e.getStringAttribute("name");
+	endpoint.numChannels = (e.getIntAttribute("channels") == 2) ? 2 : 1;
+
+	return endpoint;
+}
+
 std::unique_ptr<XmlElement> PluginGraph::createXml() const
 {
 	auto xml = std::make_unique<XmlElement>("FILTERGRAPH");
@@ -525,12 +623,47 @@ std::unique_ptr<XmlElement> PluginGraph::createXml() const
 		e->setAttribute("dstChannel", connection.destination.channelIndex);
 	}
 
+	{
+		auto* io = xml->createNewChildElement("IO");
+
+		for (const auto& e : inputs)
+		{
+			auto* el = io->createNewChildElement("INPUT");
+			el->setAttribute("id", e.id.toString());
+			el->setAttribute("name", e.name);
+			el->setAttribute("channels", e.numChannels);
+		}
+
+		for (const auto& e : outputs)
+		{
+			auto* el = io->createNewChildElement("OUTPUT");
+			el->setAttribute("id", e.id.toString());
+			el->setAttribute("name", e.name);
+			el->setAttribute("channels", e.numChannels);
+		}
+	}
+
 	return xml;
 }
 
 void PluginGraph::restoreFromXml(const XmlElement& xml)
 {
 	clear();
+
+	inputs.clear();
+	outputs.clear();
+
+	if (auto* io = xml.getChildByName("IO"))
+	{
+		for (auto* e : io->getChildWithTagNameIterator("INPUT"))
+			inputs.push_back(ioEndpointFromXml(*e));
+
+		for (auto* e : io->getChildWithTagNameIterator("OUTPUT"))
+			outputs.push_back(ioEndpointFromXml(*e));
+	}
+
+	if (inputs.empty() && outputs.empty())
+		seedDefaultIO();
 
 	for (auto* e : xml.getChildWithTagNameIterator("FILTER"))
 	{

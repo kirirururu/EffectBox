@@ -18,6 +18,7 @@ target_sources(EffectBox PRIVATE
 	plugins/PluginGraph.cpp
 
 	ui/GraphEditorPanel.cpp
+	ui/GraphIOEditor.cpp
 	ui/IOPanels.cpp
 	ui/MainHostWindow.cpp
 

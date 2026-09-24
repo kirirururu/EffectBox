@@ -1230,6 +1230,8 @@ GraphDocumentComponent::GraphDocumentComponent(AudioPluginFormatManager& fm,
 {
 	init();
 
+	graph->addChangeListener(this);
+
 	deviceManager.addChangeListener(graphPanel.get());
 	deviceManager.addAudioCallback(&graphPlayer);
 	deviceManager.addMidiInputDeviceCallback({}, &graphPlayer.getMidiMessageCollector());
@@ -1244,21 +1246,11 @@ void GraphDocumentComponent::init()
 	addAndMakeVisible(graphPanel.get());
 	graphPlayer.setProcessor(&graph->graph);
 
-	{
-		StringArray inputNames, outputNames;
+	inputPanel.reset(new IOPanelComponent("Inputs", true, ioPanelWidth));
+	addAndMakeVisible(inputPanel.get());
 
-		for (int i = 1; i <= defaultNumEndpoints; ++i)
-		{
-			inputNames.add("Input " + String(i));
-			outputNames.add("Output " + String(i));
-		}
-
-		inputPanel.reset(new IOPanelComponent("Inputs", true, inputNames, ioPanelWidth));
-		addAndMakeVisible(inputPanel.get());
-
-		outputPanel.reset(new IOPanelComponent("Outputs", false, outputNames, ioPanelWidth));
-		addAndMakeVisible(outputPanel.get());
-	}
+	outputPanel.reset(new IOPanelComponent("Outputs", false, ioPanelWidth));
+	addAndMakeVisible(outputPanel.get());
 
 	statusBar.reset(new TooltipBar());
 	addAndMakeVisible(statusBar.get());
@@ -1283,6 +1275,8 @@ void GraphDocumentComponent::init()
 		addAndMakeVisible(pluginListSidePanel);
 		addAndMakeVisible(mobileSettingsSidePanel);
 	}
+
+	refreshIOPanels();
 }
 
 GraphDocumentComponent::~GraphDocumentComponent()
@@ -1329,6 +1323,9 @@ void GraphDocumentComponent::releaseGraph()
 {
 	deviceManager.removeAudioCallback(&graphPlayer);
 	deviceManager.removeMidiInputDeviceCallback({}, &graphPlayer.getMidiMessageCollector());
+
+	if (graph != nullptr)
+		graph->removeChangeListener(this);
 
 	if (graphPanel != nullptr)
 	{
@@ -1413,6 +1410,31 @@ bool GraphDocumentComponent::closeAnyOpenPluginWindows() const
 void GraphDocumentComponent::changeListenerCallback(ChangeBroadcaster*)
 {
 	updateMidiOutput();
+	refreshIOPanels();
+}
+
+void GraphDocumentComponent::refreshIOPanels()
+{
+	if (inputPanel == nullptr || outputPanel == nullptr || graph == nullptr)
+		return;
+
+	StringArray inputNames, outputNames;
+	Array<int> inputChannels, outputChannels;
+
+	for (const auto& e : graph->inputs)
+	{
+		inputNames.add(e.name);
+		inputChannels.add(e.numChannels);
+	}
+
+	for (const auto& e : graph->outputs)
+	{
+		outputNames.add(e.name);
+		outputChannels.add(e.numChannels);
+	}
+
+	inputPanel->setEndpoints(inputNames, inputChannels);
+	outputPanel->setEndpoints(outputNames, outputChannels);
 }
 
 void GraphDocumentComponent::updateMidiOutput()

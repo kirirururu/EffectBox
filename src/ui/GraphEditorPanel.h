@@ -158,7 +158,6 @@ private:
 	std::unique_ptr<IOPanelComponent> outputPanel;
 
 	static constexpr int ioPanelWidth = 140;
-	static constexpr int defaultNumEndpoints = 2;
 
 	struct TooltipBar;
 	std::unique_ptr<TooltipBar> statusBar;
@@ -180,6 +179,7 @@ private:
 	void init();
 	void checkAvailableWidth();
 	void updateMidiOutput();
+	void refreshIOPanels();
 
 	//==============================================================================
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphDocumentComponent)

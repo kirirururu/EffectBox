@@ -52,6 +52,7 @@ static const int aboutBox = 0x30300;
 static const int allWindowsForward = 0x30400;
 static const int toggleDoublePrecision = 0x30500;
 static const int autoScalePluginWindows = 0x30600;
+static const int showGraphIO = 0x30700;
 } // namespace CommandIDs
 
 //==============================================================================
@@ -130,6 +131,7 @@ private:
 	static void updateAutoScaleMenuItem(ApplicationCommandInfo& info);
 
 	void showAudioSettings();
+	void showGraphIOEditor();
 
 	//==============================================================================
 	AudioDeviceManager deviceManager;

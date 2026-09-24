@@ -33,17 +33,21 @@ public:
 class IOEndpointComponent final : public Component
 {
 public:
-	explicit IOEndpointComponent(String name);
+	IOEndpointComponent(String name, int numChannels);
 
 	void paint(Graphics&) override;
 	void resized() override;
 
 	String getEndpointName() const { return endpointName; }
+	int getNumChannels() const { return numChannels; }
 
 private:
 	const String endpointName;
-	Rectangle<int> textArea;
-	Font font = FontOptions{13.0f, Font::bold};
+	const int numChannels;
+	Rectangle<int> nameArea;
+	Rectangle<int> channelArea;
+	Font nameFont = FontOptions{13.0f, Font::bold};
+	Font channelFont = FontOptions{10.0f, Font::plain};
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IOEndpointComponent)
 };
@@ -62,10 +66,18 @@ private:
 class IOPanelComponent final : public Component
 {
 public:
-	IOPanelComponent(String title, bool isInput, const StringArray& endpointNames, int visibleWidth);
+	IOPanelComponent(String title, bool isInput, int visibleWidth);
 
 	void paint(Graphics&) override;
 	void resized() override;
+
+	/** Rebuilds the list of endpoints shown by the panel.
+
+	    @param names     The display name of each endpoint, in order.
+	    @param channels  The channel count (1 = mono, 2 = stereo) of each
+	                    endpoint; missing entries default to mono.
+	*/
+	void setEndpoints(const StringArray& names, const Array<int>& channels);
 
 	/** The width of the transparent strip that overhangs the graph area. */
 	static constexpr int portOverhang = IOPortComponent::portSize / 2;
@@ -97,6 +109,8 @@ private:
 	const String panelTitle;
 	const bool isInput;
 	const int visibleWidth;
+	StringArray lastNames;
+	Array<int> lastChannels;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IOPanelComponent)
 };
