@@ -180,9 +180,6 @@ public:
 	{
 		File fileToOpen;
 
-#if JUCE_ANDROID || JUCE_IOS
-		fileToOpen = PluginGraph::getDefaultGraphDocumentOnMobile();
-#else
 		for (int i = 0; i < getCommandLineParameterArray().size(); ++i)
 		{
 			fileToOpen =
@@ -191,7 +188,6 @@ public:
 			if (fileToOpen.existsAsFile())
 				break;
 		}
-#endif
 
 		if (!fileToOpen.existsAsFile())
 		{
@@ -214,15 +210,6 @@ public:
 		mainWindow = nullptr;
 		appProperties = nullptr;
 		LookAndFeel::setDefaultLookAndFeel(nullptr);
-	}
-
-	void suspended() override
-	{
-#if JUCE_ANDROID || JUCE_IOS
-		if (auto graph = mainWindow->graphHolder.get())
-			if (auto ioGraph = graph->graph.get())
-				ioGraph->saveDocument(PluginGraph::getDefaultGraphDocumentOnMobile());
-#endif
 	}
 
 	void systemRequestedQuit() override

@@ -328,13 +328,9 @@ MainHostWindow::MainHostWindow()
 		    safeThis->deviceManager.initialise(granted ? 256 : 0, 256, savedState.get(), true);
 	    });
 
-#if JUCE_IOS || JUCE_ANDROID
-	setFullScreen(true);
-#else
 	setResizable(true, false);
 	setResizeLimits(500, 400, 10000, 10000);
 	centreWithSize(800, 600);
-#endif
 
 	knownPluginList.setCustomScanner(std::make_unique<CustomPluginScanner>());
 
@@ -369,14 +365,10 @@ MainHostWindow::MainHostWindow()
 
 	Process::setPriority(Process::HighPriority);
 
-#if JUCE_IOS || JUCE_ANDROID
-	graphHolder->burgerMenu.setModel(this);
-#else
 #if JUCE_MAC
 	setMacMainMenu(this);
 #else
 	setMenuBar(this);
-#endif
 #endif
 
 	getCommandManager().setFirstCommandTarget(this);
@@ -393,12 +385,10 @@ MainHostWindow::~MainHostWindow()
 	getAppProperties().getUserSettings()->setValue("mainWindowPos", getWindowStateAsString());
 	clearContentComponent();
 
-#if !(JUCE_ANDROID || JUCE_IOS)
 #if JUCE_MAC
 	setMacMainMenu(nullptr);
 #else
 	setMenuBar(nullptr);
-#endif
 #endif
 
 	graphHolder = nullptr;
@@ -453,10 +443,6 @@ void MainHostWindow::tryToQuitApplication()
 			JUCEApplication::quit();
 		};
 
-#if JUCE_ANDROID || JUCE_IOS
-		if (graphHolder->graph->saveDocument(PluginGraph::getDefaultGraphDocumentOnMobile()))
-			releaseAndQuit();
-#else
 		SafePointer<MainHostWindow> parent{this};
 		graphHolder->graph->saveIfNeededAndUserAgreesAsync(
 		    [parent, releaseAndQuit](FileBasedDocument::SaveResult r)
@@ -467,7 +453,6 @@ void MainHostWindow::tryToQuitApplication()
 			    if (r == FileBasedDocument::savedOk)
 				    releaseAndQuit();
 		    });
-#endif
 
 		return;
 	}
@@ -518,10 +503,8 @@ PopupMenu MainHostWindow::getMenuForIndex(int topLevelMenuIndex, const String& /
 	if (topLevelMenuIndex == 0)
 	{
 		// "File" menu
-#if !(JUCE_IOS || JUCE_ANDROID)
 		menu.addCommandItem(&getCommandManager(), CommandIDs::newFile);
 		menu.addCommandItem(&getCommandManager(), CommandIDs::open);
-#endif
 
 		RecentlyOpenedFilesList recentFiles;
 		recentFiles.restoreFromString(
@@ -531,11 +514,8 @@ PopupMenu MainHostWindow::getMenuForIndex(int topLevelMenuIndex, const String& /
 		recentFiles.createPopupMenuItems(recentFilesMenu, 100, true, true);
 		menu.addSubMenu("Open recent file", recentFilesMenu);
 
-#if !(JUCE_IOS || JUCE_ANDROID)
 		menu.addCommandItem(&getCommandManager(), CommandIDs::save);
 		menu.addCommandItem(&getCommandManager(), CommandIDs::saveAs);
-#endif
-
 		menu.addSeparator();
 		menu.addCommandItem(&getCommandManager(), StandardApplicationCommandIDs::quit);
 	}
@@ -594,7 +574,6 @@ void MainHostWindow::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
 			if (auto* graph = graphHolder->graph.get())
 				graph->clear();
 	}
-#if !(JUCE_ANDROID || JUCE_IOS)
 	else if (menuItemID >= 100 && menuItemID < 200)
 	{
 		RecentlyOpenedFilesList recentFiles;
@@ -619,7 +598,6 @@ void MainHostWindow::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
 			}
 		}
 	}
-#endif
 	else if (menuItemID >= 200 && menuItemID < 210)
 	{
 		if (menuItemID == 200)
@@ -701,7 +679,7 @@ static void addToMenu(const KnownPluginList::PluginTree& tree,
 		addPlugin(PluginDescriptionAndPreference{plugin, PluginDescriptionAndPreference::UseARA::no},
 		          name);
 
-#if JUCE_PLUGINHOST_ARA && (JUCE_MAC || JUCE_WINDOWS || JUCE_LINUX)
+#if JUCE_PLUGINHOST_ARA
 		if (plugin.hasARAExtension)
 		{
 			name << " (ARA)";
@@ -760,12 +738,10 @@ void MainHostWindow::getAllCommands(Array<CommandID>& commands)
 {
 	// this returns the set of all commands that this target can perform..
 	const CommandID ids[] = {
-#if !(JUCE_IOS || JUCE_ANDROID)
 	    CommandIDs::newFile,
 	    CommandIDs::open,
 	    CommandIDs::save,
 	    CommandIDs::saveAs,
-#endif
 	    CommandIDs::showPluginListEditor,
 	    CommandIDs::showGraphIO,
 	    CommandIDs::showAudioSettings,
@@ -783,7 +759,6 @@ void MainHostWindow::getCommandInfo(const CommandID commandID, ApplicationComman
 
 	switch (commandID)
 	{
-#if !(JUCE_IOS || JUCE_ANDROID)
 	case CommandIDs::newFile:
 		result.setInfo("New", "Creates a new filter graph file", category, 0);
 		result.defaultKeypresses.add(KeyPress('n', ModifierKeys::commandModifier, 0));
@@ -804,7 +779,6 @@ void MainHostWindow::getCommandInfo(const CommandID commandID, ApplicationComman
 		result.defaultKeypresses.add(
 		    KeyPress('s', ModifierKeys::shiftModifier | ModifierKeys::commandModifier, 0));
 		break;
-#endif
 
 	case CommandIDs::showPluginListEditor:
 		result.setInfo("Edit the List of Available Plug-ins...", {}, category, 0);
@@ -847,7 +821,6 @@ bool MainHostWindow::perform(const InvocationInfo& info)
 {
 	switch (info.commandID)
 	{
-#if !(JUCE_IOS || JUCE_ANDROID)
 	case CommandIDs::newFile:
 		if (graphHolder != nullptr && graphHolder->graph != nullptr)
 		{
@@ -890,7 +863,6 @@ bool MainHostWindow::perform(const InvocationInfo& info)
 		if (graphHolder != nullptr && graphHolder->graph != nullptr)
 			graphHolder->graph->saveAsAsync({}, true, true, true, nullptr);
 		break;
-#endif
 
 	case CommandIDs::showPluginListEditor:
 		if (pluginListWindow == nullptr)
@@ -1033,7 +1005,6 @@ void MainHostWindow::filesDropped(const StringArray& files, int x, int y)
 {
 	if (graphHolder != nullptr)
 	{
-#if !(JUCE_ANDROID || JUCE_IOS)
 		File firstFile{files[0]};
 
 		if (files.size() == 1 && firstFile.hasFileExtension(PluginGraph::getFilenameSuffix()))
@@ -1053,7 +1024,6 @@ void MainHostWindow::filesDropped(const StringArray& files, int x, int y)
 			}
 		}
 		else
-#endif
 		{
 			OwnedArray<PluginDescription> typesFound;
 			knownPluginList.scanAndAddDragAndDroppedFiles(formatManager, files, typesFound);

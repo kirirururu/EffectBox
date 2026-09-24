@@ -185,23 +185,10 @@ public:
 
 		setConstrainer(&constrainer);
 
-#if JUCE_IOS || JUCE_ANDROID
-		const auto screenBounds = Desktop::getInstance().getDisplays().getTotalBounds(true).toFloat();
-		const auto scaleFactor = jmin((screenBounds.getWidth() - 50.0f) / (float)getWidth(),
-		                              (screenBounds.getHeight() - 50.0f) / (float)getHeight());
-
-		if (scaleFactor < 1.0f)
-		{
-			setSize((int)(scaleFactor * (float)getWidth()), (int)(scaleFactor * (float)getHeight()));
-		}
-
-		setTopLeftPosition(20, 20);
-#else
 		setTopLeftPosition(node->properties.getWithDefault(getLastXProp(type),
 		                                                   Random::getSystemRandom().nextInt(500)),
 		                   node->properties.getWithDefault(getLastYProp(type),
 		                                                   Random::getSystemRandom().nextInt(500)));
-#endif
 
 		node->properties.set(getOpenProp(type), true);
 
@@ -231,16 +218,6 @@ public:
 	OwnedArray<PluginWindow>& activeWindowList;
 	const AudioProcessorGraph::Node::Ptr node;
 	const Type type;
-
-	BorderSize<int> getBorderThickness() const override
-	{
-#if JUCE_IOS || JUCE_ANDROID
-		const int border = 10;
-		return {border, border, border, border};
-#else
-		return DocumentWindow::getBorderThickness();
-#endif
-	}
 
 private:
 	class DecoratorConstrainer final : public BorderedComponentBoundsConstrainer
@@ -290,7 +267,7 @@ private:
 
 		if (type == PluginWindow::Type::araHost)
 		{
-#if JUCE_PLUGINHOST_ARA && (JUCE_MAC || JUCE_WINDOWS || JUCE_LINUX)
+#if JUCE_PLUGINHOST_ARA
 			if (auto* araPluginInstanceWrapper = dynamic_cast<ARAPluginInstanceWrapper*>(&processor))
 				if (auto* ui = araPluginInstanceWrapper->createARAHostEditor())
 					return ui;

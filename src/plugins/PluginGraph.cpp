@@ -112,7 +112,7 @@ void PluginGraph::addPluginCallback(std::unique_ptr<AudioPluginInstance> instanc
 	}
 	else
 	{
-#if JUCE_PLUGINHOST_ARA && (JUCE_MAC || JUCE_WINDOWS || JUCE_LINUX)
+#if JUCE_PLUGINHOST_ARA
 		if (useARA == PluginDescriptionAndPreference::UseARA::yes &&
 		    instance->getPluginDescription().hasARAExtension)
 		{
@@ -248,13 +248,9 @@ PluginWindow* PluginGraph::getOrCreateWindowFor(AudioProcessorGraph::Node* node,
 {
 	jassert(node != nullptr);
 
-#if JUCE_IOS || JUCE_ANDROID
-	closeAnyOpenPluginWindows();
-#else
 	for (auto* w : activePluginWindows)
 		if (w->node.get() == node && w->type == type)
 			return w;
-#endif
 
 	if (auto* processor = node->getProcessor())
 	{
@@ -510,7 +506,7 @@ void PluginGraph::createNodeFromXml(const XmlElement& xml)
 			                                                   graph.getSampleRate(),
 			                                                   graph.getBlockSize(), errorMessage);
 
-#if JUCE_PLUGINHOST_ARA && (JUCE_MAC || JUCE_WINDOWS || JUCE_LINUX)
+#if JUCE_PLUGINHOST_ARA
 			if (instance && description.useARA == PluginDescriptionAndPreference::UseARA::yes &&
 			    description.pluginDescription.hasARAExtension)
 			{

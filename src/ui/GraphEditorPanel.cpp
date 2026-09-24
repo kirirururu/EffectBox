@@ -38,68 +38,6 @@
 #include "MainHostWindow.h"
 #include "plugins/InternalPlugins.h"
 
-//==============================================================================
-#if JUCE_IOS
-class AUScanner
-{
-public:
-	explicit AUScanner(KnownPluginList& list) : knownPluginList(list)
-	{
-		knownPluginList.clearBlacklistedFiles();
-		paths = formatToScan.getDefaultLocationsToSearch();
-
-		startScan();
-	}
-
-private:
-	KnownPluginList& knownPluginList;
-	AudioUnitPluginFormat formatToScan;
-
-	std::unique_ptr<PluginDirectoryScanner> scanner;
-	FileSearchPath paths;
-
-	static constexpr auto numJobs = 5;
-	ThreadPool pool{ThreadPoolOptions{}.withNumberOfThreads(numJobs)};
-
-	void startScan()
-	{
-		auto deadMansPedalFile = getAppProperties().getUserSettings()->getFile().getSiblingFile(
-		    "RecentlyCrashedPluginsList");
-
-		scanner.reset(new PluginDirectoryScanner(knownPluginList, formatToScan, paths, true,
-		                                         deadMansPedalFile, true));
-
-		for (int i = numJobs; --i >= 0;)
-			pool.addJob(new ScanJob(*this), true);
-	}
-
-	bool doNextScan()
-	{
-		String pluginBeingScanned;
-		return scanner->scanNextFile(true, pluginBeingScanned);
-	}
-
-	struct ScanJob final : public ThreadPoolJob
-	{
-		ScanJob(AUScanner& s) : ThreadPoolJob("pluginscan"), scanner(s) { }
-
-		JobStatus runJob() override
-		{
-			while (scanner.doNextScan() && !shouldExit())
-			{
-			}
-
-			return jobHasFinished;
-		}
-
-		AUScanner& scanner;
-
-		JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ScanJob)
-	};
-
-	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AUScanner)
-};
-#endif
 
 //==============================================================================
 struct GraphEditorPanel::PinComponent final : public Component, public SettableTooltipClient
@@ -433,7 +371,7 @@ struct GraphEditorPanel::PluginComponent final : public Component,
 		menu->addItem("Show all parameters", [this] { showWindow(PluginWindow::Type::generic); });
 		menu->addItem("Show debug log", [this] { showWindow(PluginWindow::Type::debug); });
 
-#if JUCE_PLUGINHOST_ARA && (JUCE_MAC || JUCE_WINDOWS || JUCE_LINUX)
+#if JUCE_PLUGINHOST_ARA
 		if (auto* instance = dynamic_cast<AudioPluginInstance*>(getProcessor()))
 			if (instance->getPluginDescription().hasARAExtension && isNodeUsingARA())
 				menu->addItem("Show ARA host controls",
@@ -447,12 +385,9 @@ struct GraphEditorPanel::PluginComponent final : public Component,
 		menu->addSeparator();
 		menu->addItem("Configure Audio I/O", [this] { showWindow(PluginWindow::Type::audioIO); });
 		menu->addItem("Test state save/load", [this] { testStateSaveLoad(); });
-
-#if !JUCE_IOS && !JUCE_ANDROID
 		menu->addSeparator();
 		menu->addItem("Save plugin state", [this] { savePluginState(); });
 		menu->addItem("Load plugin state", [this] { loadPluginState(); });
-#endif
 
 		menu->showMenuAsync(PopupMenu::Options{}.withTargetScreenArea(
 		    Rectangle<int>{}.withPosition(localPointToGlobal(localPos))));
@@ -1168,10 +1103,6 @@ struct GraphDocumentComponent::PluginListBoxModel final : public ListBoxModel,
 	{
 		knownPlugins.addChangeListener(this);
 		owner.addMouseListener(this, true);
-
-#if JUCE_IOS
-		scanner.reset(new AUScanner(knownPlugins));
-#endif
 	}
 
 	int getNumRows() override { return knownPlugins.getNumTypes(); }
@@ -1210,10 +1141,6 @@ struct GraphDocumentComponent::PluginListBoxModel final : public ListBoxModel,
 	KnownPluginList& knownPlugins;
 
 	bool isOverSelectedRow = false;
-
-#if JUCE_IOS
-	std::unique_ptr<AUScanner> scanner;
-#endif
 
 	JUCE_DECLARE_NON_COPYABLE(PluginListBoxModel)
 };
