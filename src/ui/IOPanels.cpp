@@ -41,7 +41,7 @@ void IOEndpointComponent::paint(Graphics& g)
 
 	g.setColour(findColour(TextEditor::textColourId).withAlpha(0.6f));
 	g.setFont(channelFont);
-	g.drawText(numChannels == 2 ? "Stereo" : "Mono", channelArea, Justification::centredLeft, 1);
+	g.drawText(numChannels == 2 ? "Stereo" : "Mono", channelArea, Justification::centredLeft, true);
 
 	g.setColour(Colours::black.withAlpha(0.4f));
 	g.fillRect(0, getHeight() - 1, getWidth(), 1);
@@ -50,7 +50,7 @@ void IOEndpointComponent::paint(Graphics& g)
 void IOEndpointComponent::resized()
 {
 	auto area = getLocalBounds().reduced(6, 4);
-	nameArea = area.removeFromTop((int)(area.getHeight() * 0.55f));
+	nameArea = area.removeFromTop(static_cast<int>(static_cast<float>(area.getHeight()) * 0.55f));
 	channelArea = area;
 }
 

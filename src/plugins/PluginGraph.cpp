@@ -156,7 +156,8 @@ void PluginGraph::removeIOEndpoint(const Uuid& id, bool isInput)
 {
 	auto& v = ioVector(isInput);
 
-	for (int i = v.size(); --i >= 0;)
+	int i = (int)(v.size());
+	while (--i >= 0)
 		if (v[(size_t)i].id == id)
 			v.erase(v.begin() + i);
 
@@ -194,9 +195,9 @@ int PluginGraph::indexOfIOEndpoint(const Uuid& id, bool isInput)
 {
 	const auto& v = ioVector(isInput);
 
-	for (int i = 0; i < v.size(); ++i)
-		if (v[(size_t)i].id == id)
-			return i;
+	for (size_t i = 0; i < v.size(); ++i)
+		if (v[i].id == id)
+			return static_cast<int>(i);
 
 	return -1;
 }

@@ -23,7 +23,7 @@ public:
 		g.setColour(rowIsSelected ? Colours::white : Colours::grey);
 		g.setFont(FontOptions(13.0f, Font::plain));
 
-		const auto& e = eps[row];
+		const auto& e = eps[static_cast<size_t>(row)];
 		const auto text = e.name + "   (" + (e.numChannels == 2 ? "Stereo" : "Mono") + ")";
 		g.drawText(text, 6, 0, width - 12, height, Justification::centredLeft);
 
@@ -127,7 +127,7 @@ void GraphIOEditor::updateEditingControls()
 		return;
 	}
 
-	const auto& e = eps[currentIndex];
+	const auto& e = eps[static_cast<size_t>(currentIndex)];
 
 	updatingUI = true;
 	nameEditor.setText(e.name, NotificationType::dontSendNotification);
@@ -159,7 +159,7 @@ void GraphIOEditor::removeSelected()
 	if (!isPositiveAndBelow(currentIndex, eps.size()))
 		return;
 
-	const Uuid id = eps[currentIndex].id;
+	const Uuid id = eps[static_cast<size_t>(currentIndex)].id;
 	graph.removeIOEndpoint(id, currentIsInput);
 
 	auto* lb = currentIsInput ? &inputList : &outputList;
@@ -188,7 +188,7 @@ void GraphIOEditor::textEditorTextChanged(TextEditor& e)
 	if (!isPositiveAndBelow(currentIndex, eps.size()))
 		return;
 
-	const Uuid id = eps[currentIndex].id;
+	const Uuid id = eps[static_cast<size_t>(currentIndex)].id;
 	graph.setIOEndpointName(id, nameEditor.getText(), currentIsInput);
 	(currentIsInput ? inputList : outputList).repaint();
 }
@@ -204,7 +204,7 @@ void GraphIOEditor::comboBoxChanged(ComboBox* c)
 		return;
 
 	const int numChannels = (channelsCombo.getSelectedItemIndex() == 1) ? 2 : 1;
-	const Uuid id = eps[currentIndex].id;
+	const Uuid id = eps[static_cast<size_t>(currentIndex)].id;
 	graph.setIOEndpointChannels(id, numChannels, currentIsInput);
 	(currentIsInput ? inputList : outputList).repaint();
 }
