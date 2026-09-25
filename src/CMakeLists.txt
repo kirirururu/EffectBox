@@ -13,6 +13,8 @@ juce_generate_juce_header(EffectBox)
 
 target_sources(EffectBox PRIVATE
 	plugins/IOConfigurationWindow.cpp
+	plugins/SineWaveSynthPlugin.cpp
+	plugins/ReverbPlugin.cpp
 	plugins/InternalPlugins.cpp
 	plugins/PluginGraph.cpp
 

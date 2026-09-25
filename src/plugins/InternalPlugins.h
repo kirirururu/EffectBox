@@ -44,27 +44,29 @@
 class InternalPluginFormat final : public AudioPluginFormat
 {
 public:
-	//==============================================================================
 	InternalPluginFormat();
 
-	//==============================================================================
 	const std::vector<PluginDescription>& getAllTypes() const;
+	static String getIdentifier();
 
 	//==============================================================================
-	static String getIdentifier() { return "Internal"; }
-	String getName() const override { return getIdentifier(); }
-	bool fileMightContainThisPluginType(const String&) override { return true; }
-	FileSearchPath getDefaultLocationsToSearch() override { return {}; }
-	bool canScanForPlugins() const override { return false; }
-	bool isTrivialToScan() const override { return true; }
-	void findAllTypesForFile(OwnedArray<PluginDescription>&, const String&) override { }
-	bool doesPluginStillExist(const PluginDescription&) override { return true; }
-	String getNameOfPluginFromIdentifier(const String& fileOrIdentifier) override
-	{
-		return fileOrIdentifier;
-	}
-	bool pluginNeedsRescanning(const PluginDescription&) override { return false; }
-	StringArray searchPathsForPlugins(const FileSearchPath&, bool, bool) override { return {}; }
+	String getName() const override;
+	bool fileMightContainThisPluginType(const String&) override;
+	FileSearchPath getDefaultLocationsToSearch() override;
+	bool canScanForPlugins() const override;
+	bool isTrivialToScan() const override;
+	void findAllTypesForFile(OwnedArray<PluginDescription>&, const String&) override;
+	bool doesPluginStillExist(const PluginDescription&) override;
+	String getNameOfPluginFromIdentifier(const String& fileOrIdentifier) override;
+	bool pluginNeedsRescanning(const PluginDescription&) override;
+	StringArray searchPathsForPlugins(const FileSearchPath&, bool, bool) override;
+	bool requiresUnblockedMessageThreadDuringCreation(const PluginDescription&) const override;
+
+protected:
+	void createPluginInstance(const PluginDescription&,
+							  double initialSampleRate,
+							  int initialBufferSize,
+							  PluginCreationCallback) override;
 
 private:
 	class InternalPluginFactory
@@ -74,7 +76,7 @@ private:
 
 		explicit InternalPluginFactory(const std::initializer_list<Constructor>& constructorsIn);
 
-		const std::vector<PluginDescription>& getDescriptions() const { return descriptions; }
+		const std::vector<PluginDescription>& getDescriptions() const;
 
 		std::unique_ptr<AudioPluginInstance> createInstance(const String& name) const;
 
@@ -83,15 +85,7 @@ private:
 		const std::vector<PluginDescription> descriptions;
 	};
 
-	//==============================================================================
-	void createPluginInstance(const PluginDescription&,
-	                          double initialSampleRate,
-	                          int initialBufferSize,
-	                          PluginCreationCallback) override;
-
 	std::unique_ptr<AudioPluginInstance> createInstance(const String& name);
-
-	bool requiresUnblockedMessageThreadDuringCreation(const PluginDescription&) const override;
 
 	InternalPluginFactory factory;
 };
