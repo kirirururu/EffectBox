@@ -32,11 +32,8 @@
   ==============================================================================
 */
 
-#include <JuceHeader.h>
-
 #include "GraphEditorPanel.h"
 #include "MainHostWindow.h"
-#include "plugins/InternalPlugins.h"
 
 
 //==============================================================================

@@ -32,8 +32,6 @@
   ==============================================================================
 */
 
-#include <JuceHeader.h>
-
 #include "ui/MainHostWindow.h"
 
 #include <memory>
@@ -229,7 +227,7 @@ public:
 	}
 
 	const String getApplicationName() override { return "Juce Plug-In Host"; }
-	const String getApplicationVersion() override { return ProjectInfo::versionString; }
+	const String getApplicationVersion() override { return "0.1.0"; } // TODO: get from CMake
 	bool moreThanOneInstanceAllowed() override { return true; }
 
 	ApplicationCommandManager commandManager;
@@ -249,6 +247,7 @@ ApplicationProperties& getAppProperties()
 {
 	return *getApp().appProperties;
 }
+
 ApplicationCommandManager& getCommandManager()
 {
 	return getApp().commandManager;

@@ -1,5 +1,5 @@
 /*
-  ==============================================================================
+==============================================================================
 
    This file is part of the JUCE framework.
    Copyright (c) Raw Material Software Limited
@@ -34,40 +34,41 @@
 
 #pragma once
 
-#include <JuceHeader.h>
+#include <juce_audio_processors/juce_audio_processors.h>
 
-class MainHostWindow;
-class GraphDocumentComponent;
+using namespace juce;
 
-
-//==============================================================================
-class IOConfigurationWindow final : public AudioProcessorEditor
+/**
+    A window that shows a log of parameter change messages sent by the plugin.
+*/
+class PluginDebugWindow final : public AudioProcessorEditor,
+                                public AudioProcessorParameter::Listener,
+                                public ListBoxModel,
+                                public AsyncUpdater
 {
 public:
-	IOConfigurationWindow(AudioProcessor&);
-	~IOConfigurationWindow() override;
+	PluginDebugWindow(AudioProcessor& proc);
+	~PluginDebugWindow() override;
 
-	//==============================================================================
-	void paint(Graphics& g) override;
+	void parameterValueChanged(int parameterIndex, float newValue) override;
+	void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
+
 	void resized() override;
+	int getNumRows() override;
+	void paintListBoxItem(int rowNumber, Graphics& g, int width, int height, bool) override;
+	void handleAsyncUpdate() override;
 
 private:
-	class InputOutputConfig;
+	void appendToLog(StringRef action, AudioProcessorParameter& param, StringRef value);
 
-	AudioProcessor::BusesLayout currentLayout;
-	Label title;
-	std::unique_ptr<InputOutputConfig> inConfig, outConfig;
+	constexpr static int maxLogSize = 300;
+	constexpr static int logSizeTrimThreshold = 400;
 
-	InputOutputConfig* getConfig(bool isInput) noexcept
-	{
-		return isInput ? inConfig.get() : outConfig.get();
-	}
-	void update();
+	ListBox list{"Log", this};
 
-	MainHostWindow* getMainWindow() const;
-	GraphDocumentComponent* getGraphEditor() const;
-	AudioProcessorGraph* getGraph() const;
-	AudioProcessorGraph::NodeID getNodeID() const;
+	StringArray log;
+	StringArray pendingLogEntries;
+	CriticalSection pendingLogLock;
 
-	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IOConfigurationWindow)
+	AudioProcessor& audioProc;
 };

@@ -34,7 +34,12 @@
 
 #pragma once
 
-#include "ui/PluginWindow.h"
+#include "PluginWindow.h"
+
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_gui_extra/juce_gui_extra.h>
+
+using namespace juce;
 
 //==============================================================================
 /** A type that encapsulates a PluginDescription and some preferences regarding
@@ -44,8 +49,7 @@ struct PluginDescriptionAndPreference
 {
 	PluginDescriptionAndPreference() = default;
 
-	explicit PluginDescriptionAndPreference(PluginDescription pd)
-	    : pluginDescription(std::move(pd))
+	explicit PluginDescriptionAndPreference(PluginDescription pd) : pluginDescription(std::move(pd))
 	{
 	}
 
@@ -154,9 +158,7 @@ private:
 	NodeID getNextUID() noexcept;
 
 	void createNodeFromXml(const XmlElement&);
-	void addPluginCallback(std::unique_ptr<AudioPluginInstance>,
-	                       const String& error,
-	                       Point<double>);
+	void addPluginCallback(std::unique_ptr<AudioPluginInstance>, const String& error, Point<double>);
 
 	//==============================================================================
 	std::vector<GraphIOEndpoint>& ioVector(bool isInput) { return isInput ? inputs : outputs; }

@@ -34,14 +34,15 @@
 
 #pragma once
 
-#include "PluginGraph.h"
+#include <juce_audio_processors_headless/juce_audio_processors_headless.h>
 
+using namespace juce;
 
 //==============================================================================
 /**
     Manages the internal plugin types.
 */
-class InternalPluginFormat final : public AudioPluginFormat
+class InternalPluginFormat final : public juce::AudioPluginFormat
 {
 public:
 	InternalPluginFormat();
@@ -64,9 +65,9 @@ public:
 
 protected:
 	void createPluginInstance(const PluginDescription&,
-							  double initialSampleRate,
-							  int initialBufferSize,
-							  PluginCreationCallback) override;
+	                          double initialSampleRate,
+	                          int initialBufferSize,
+	                          PluginCreationCallback) override;
 
 private:
 	class InternalPluginFactory

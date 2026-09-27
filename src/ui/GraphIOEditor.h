@@ -1,6 +1,8 @@
 #pragma once
 
-#include "plugins/PluginGraph.h"
+#include "audio/PluginGraph.h"
+
+using namespace juce;
 
 //==============================================================================
 /**
@@ -34,6 +36,10 @@ public:
 	/** Removes the currently selected endpoint. */
 	void removeSelected();
 
+	void textEditorTextChanged(TextEditor&) override;
+	void comboBoxChanged(ComboBox*) override;
+	void buttonClicked(Button*) override;
+
 private:
 	//==============================================================================
 	class IOListModel;
@@ -44,10 +50,6 @@ private:
 	{
 		return isInput ? graph.inputs : graph.outputs;
 	}
-
-	void textEditorTextChanged(TextEditor&) override;
-	void comboBoxChanged(ComboBox*) override;
-	void buttonClicked(Button*) override;
 
 	PluginGraph& graph;
 

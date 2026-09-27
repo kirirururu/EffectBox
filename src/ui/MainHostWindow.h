@@ -35,8 +35,9 @@
 #pragma once
 
 #include "GraphEditorPanel.h"
-#include "plugins/PluginGraph.h"
+#include "audio/PluginGraph.h"
 
+using namespace juce;
 
 //==============================================================================
 namespace CommandIDs {

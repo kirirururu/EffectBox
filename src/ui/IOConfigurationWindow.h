@@ -1,5 +1,5 @@
 /*
-==============================================================================
+  ==============================================================================
 
    This file is part of the JUCE framework.
    Copyright (c) Raw Material Software Limited
@@ -34,38 +34,42 @@
 
 #pragma once
 
-#include <JuceHeader.h>
+#include <juce_audio_processors/juce_audio_processors.h>
 
-class ReverbPlugin final : public AudioProcessor
+using namespace juce;
+
+class MainHostWindow;
+class GraphDocumentComponent;
+
+
+//==============================================================================
+class IOConfigurationWindow final : public AudioProcessorEditor
 {
 public:
-	ReverbPlugin();
+	IOConfigurationWindow(AudioProcessor&);
+	~IOConfigurationWindow() override;
 
-	static String getIdentifier();
-
-	void prepareToPlay(double newSampleRate, int) override;
-	void reset() override;
-	void releaseResources() override;
-
-	void processBlock(AudioBuffer<float>& buffer, MidiBuffer&) override;
-
-	using AudioProcessor::processBlock;
-
-	const String getName() const override;
-	double getTailLengthSeconds() const override;
-	bool acceptsMidi() const override;
-	bool producesMidi() const override;
-	bool hasEditor() const override;
-	int getNumPrograms() override;
-	int getCurrentProgram() override;
-	void setCurrentProgram(int) override;
-	const String getProgramName(int) override;
-	void changeProgramName(int, const String&) override;
-	void getStateInformation(juce::MemoryBlock&) override;
-	void setStateInformation(const void*, int) override;
+	//==============================================================================
+	void paint(Graphics& g) override;
+	void resized() override;
 
 private:
-	AudioProcessorEditor* createEditor() override;
+	class InputOutputConfig;
 
-	Reverb reverb;
+	AudioProcessor::BusesLayout currentLayout;
+	Label title;
+	std::unique_ptr<InputOutputConfig> inConfig, outConfig;
+
+	InputOutputConfig* getConfig(bool isInput) noexcept
+	{
+		return isInput ? inConfig.get() : outConfig.get();
+	}
+	void update();
+
+	MainHostWindow* getMainWindow() const;
+	GraphDocumentComponent* getGraphEditor() const;
+	AudioProcessorGraph* getGraph() const;
+	AudioProcessorGraph::NodeID getNodeID() const;
+
+	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IOConfigurationWindow)
 };

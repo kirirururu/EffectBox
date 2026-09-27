@@ -35,7 +35,12 @@
 #pragma once
 
 #include "IOPanels.h"
-#include "plugins/PluginGraph.h"
+#include "audio/PluginGraph.h"
+
+#include <juce_audio_devices/juce_audio_devices.h>
+#include <juce_audio_utils/juce_audio_utils.h>
+
+using namespace juce;
 
 class MainHostWindow;
 

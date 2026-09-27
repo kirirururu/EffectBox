@@ -32,12 +32,9 @@
   ==============================================================================
 */
 
-#include <JuceHeader.h>
-
 #include "IOConfigurationWindow.h"
-#include "InternalPlugins.h"
-#include "ui/GraphEditorPanel.h"
-#include "ui/MainHostWindow.h"
+
+#include "MainHostWindow.h"
 
 
 //==============================================================================

@@ -34,41 +34,48 @@
 
 #pragma once
 
-#include <JuceHeader.h>
+#include "ui/MainHostWindow.h"
 
-class SineWaveSynth final : public AudioProcessor
+#include <juce_audio_processors/juce_audio_processors.h>
+
+using namespace juce;
+
+class Superprocess;
+
+constexpr const char* scanModeKey = "pluginScanMode";
+
+class CustomPluginScanner final : public KnownPluginList::CustomScanner, private ChangeListener
 {
 public:
-	SineWaveSynth();
-	static String getIdentifier();
+	CustomPluginScanner();
 
-	void prepareToPlay(double newSampleRate, int) override;
-	void releaseResources() override;
+	~CustomPluginScanner() override;
 
-	void processBlock(AudioBuffer<float>& buffer, MidiBuffer& midiMessages) override;
+	bool findPluginTypesFor(AudioPluginFormat& format,
+	                        OwnedArray<PluginDescription>& result,
+	                        const String& fileOrIdentifier) override;
 
-	using AudioProcessor::processBlock;
+	void scanFinished() override;
 
-	const String getName() const override;
-	double getTailLengthSeconds() const override;
-	bool acceptsMidi() const override;
-	bool producesMidi() const override;
-	bool hasEditor() const override;
-	int getNumPrograms() override;
-	int getCurrentProgram() override;
-	void setCurrentProgram(int) override;
-	const String getProgramName(int) override;
-	void changeProgramName(int, const String&) override;
-	void getStateInformation(juce::MemoryBlock&) override;
-	void setStateInformation(const void*, int) override;
+	void changeListenerCallback(ChangeBroadcaster*) override;
 
 private:
-	struct SineWaveSound;
-	struct SineWaveVoice;
+	/*  Scans for a plugin with format 'formatName' and ID 'fileOrIdentifier' using a subprocess,
+	    and adds discovered plugin descriptions to 'result'.
 
-	AudioProcessorEditor* createEditor() override;
+	    Returns true on success.
 
-	Synthesiser synth;
+	    Failure indicates that the subprocess is unrecoverable and should be terminated.
+	*/
+	bool addPluginDescriptions(const String& formatName,
+	                           const String& fileOrIdentifier,
+	                           OwnedArray<PluginDescription>& result);
 
-	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SineWaveSynth)
+	void handleChange();
+
+	std::unique_ptr<Superprocess> superprocess;
+
+	std::atomic<bool> scanInProcess{true};
+
+	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CustomPluginScanner)
 };

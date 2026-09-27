@@ -12,14 +12,17 @@ juce_add_gui_app(EffectBox
 juce_generate_juce_header(EffectBox)
 
 target_sources(EffectBox PRIVATE
-	plugins/IOConfigurationWindow.cpp
-	plugins/SineWaveSynthPlugin.cpp
-	plugins/ReverbPlugin.cpp
-	plugins/InternalPlugins.cpp
-	plugins/PluginGraph.cpp
+	audio/SineWaveSynthPlugin.cpp
+	audio/ReverbPlugin.cpp
+	audio/InternalPlugins.cpp
+	audio/PluginGraph.cpp
+	audio/PluginWindow.cpp
+	audio/PluginDebugWindow.cpp
+	audio/CustomPluginScanner.cpp
 
 	ui/GraphEditorPanel.cpp
 	ui/GraphIOEditor.cpp
+	ui/IOConfigurationWindow.cpp
 	ui/IOPanels.cpp
 	ui/MainHostWindow.cpp
 

@@ -37,6 +37,8 @@
 #include "ReverbPlugin.h"
 #include "SineWaveSynthPlugin.h"
 
+#include <juce_audio_processors/juce_audio_processors.h>
+
 #define PIP_DEMO_UTILITIES_INCLUDED 1
 
 //==============================================================================
@@ -202,7 +204,7 @@ private:
 		descr.pluginFormatName = InternalPluginFormat::getIdentifier();
 		descr.category = (registerAsGenerator ? (acceptsMidi ? "Synth" : "Generator") : "Effect");
 		descr.manufacturerName = "JUCE";
-		descr.version = ProjectInfo::versionString;
+		descr.version = "1.0.0";
 		descr.fileOrIdentifier = identifier;
 		descr.isInstrument = (acceptsMidi && registerAsGenerator);
 		descr.numInputChannels = ins;
