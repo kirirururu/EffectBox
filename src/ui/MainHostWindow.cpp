@@ -1,114 +1,24 @@
-/*
-  ==============================================================================
-
-   This file is part of the JUCE framework.
-   Copyright (c) Raw Material Software Limited
-
-   JUCE is an open source framework subject to commercial or open source
-   licensing.
-
-   By downloading, installing, or using the JUCE framework, or combining the
-   JUCE framework with any other source code, object code, content or any other
-   copyrightable work, you agree to the terms of the JUCE End User Licence
-   Agreement, and all incorporated terms including the JUCE Privacy Policy and
-   the JUCE Website Terms of Service, as applicable, which will bind you. If you
-   do not agree to the terms of these agreements, we will not license the JUCE
-   framework to you, and you must discontinue the installation or download
-   process and cease use of the JUCE framework.
-
-   JUCE End User Licence Agreement: https://juce.com/legal/juce-9-licence/
-   JUCE Privacy Policy: https://juce.com/juce-privacy-policy
-   JUCE Website Terms of Service: https://juce.com/juce-website-terms-of-service/
-
-   Or:
-
-   You may also use this code under the terms of the AGPLv3:
-   https://www.gnu.org/licenses/agpl-3.0.en.html
-
-   THE JUCE FRAMEWORK IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL
-   WARRANTIES, WHETHER EXPRESSED OR IMPLIED, INCLUDING WARRANTY OF
-   MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE, ARE DISCLAIMED.
-
-  ==============================================================================
-*/
-
+#include "GraphIOEditor.h"
 #include "MainHostWindow.h"
 
-#include "audio/InternalPlugins.h"
-#include "audio/CustomPluginScanner.h"
-#include "GraphIOEditor.h"
-
-//==============================================================================
-class CustomPluginListComponent final : public PluginListComponent
-{
-public:
-	CustomPluginListComponent(AudioPluginFormatManager& manager,
-	                          KnownPluginList& listToRepresent,
-	                          const File& pedal,
-	                          PropertiesFile* props,
-	                          bool async)
-	    : PluginListComponent(manager, listToRepresent, pedal, props, async)
-	{
-		addAndMakeVisible(validationModeLabel);
-		addAndMakeVisible(validationModeBox);
-
-		validationModeLabel.attachToComponent(&validationModeBox, true);
-		validationModeLabel.setJustificationType(Justification::right);
-		validationModeLabel.setSize(100, 30);
-
-		auto unusedId = 1;
-
-		for (const auto mode : {"In-process", "Out-of-process"})
-			validationModeBox.addItem(mode, unusedId++);
-
-		validationModeBox.setSelectedItemIndex(
-		    getAppProperties().getUserSettings()->getIntValue(scanModeKey));
-
-		validationModeBox.onChange = [this]
-		{
-			getAppProperties().getUserSettings()->setValue(scanModeKey,
-			                                               validationModeBox.getSelectedItemIndex());
-		};
-
-		handleResize();
-	}
-
-	void resized() override { handleResize(); }
-
-private:
-	void handleResize()
-	{
-		PluginListComponent::resized();
-
-		const auto& buttonBounds = getOptionsButton().getBounds();
-		validationModeBox.setBounds(
-		    buttonBounds.withWidth(130).withRightX(getWidth() - buttonBounds.getX()));
-	}
-
-	Label validationModeLabel{{}, "Scan mode"};
-	ComboBox validationModeBox;
-
-	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CustomPluginListComponent)
-};
+static constexpr int menuIDBase = 0x324503f4;
 
 //==============================================================================
 class MainHostWindow::PluginListWindow final : public DocumentWindow
 {
 public:
-	PluginListWindow(MainHostWindow& mw, AudioPluginFormatManager& pluginFormatManager)
+	PluginListWindow(MainHostWindow& mw, EngineClient& cl)
 	    : DocumentWindow(
 	          "Available Plugins",
 	          LookAndFeel::getDefaultLookAndFeel().findColour(ResizableWindow::backgroundColourId),
 	          DocumentWindow::minimiseButton | DocumentWindow::closeButton),
-	      owner(mw)
+	      owner(mw),
+	      client(cl)
 	{
-		auto deadMansPedalFile = getAppProperties().getUserSettings()->getFile().getSiblingFile(
-		    "RecentlyCrashedPluginsList");
+		list.setModel(&listModel);
+		list.setRowHeight(26);
 
-		setContentOwned(new CustomPluginListComponent(pluginFormatManager, owner.knownPluginList,
-		                                              deadMansPedalFile,
-		                                              getAppProperties().getUserSettings(), true),
-		                true);
+		setContentOwned(new PluginListContent(*this), true);
 
 		setResizable(true, false);
 		setResizeLimits(300, 400, 800, 1500);
@@ -122,51 +32,76 @@ public:
 	~PluginListWindow() override
 	{
 		getAppProperties().getUserSettings()->setValue("listWindowPos", getWindowStateAsString());
-		clearContentComponent();
 	}
 
 	void closeButtonPressed() override { owner.pluginListWindow = nullptr; }
 
 private:
+	struct PluginListContent final : public Component
+	{
+		explicit PluginListContent(PluginListWindow& w) : owner(w)
+		{
+			addAndMakeVisible(&w.list);
+		}
+
+		void resized() override
+		{
+			owner.list.setBounds(getLocalBounds());
+		}
+
+		PluginListWindow& owner;
+
+		JUCE_DECLARE_NON_COPYABLE(PluginListContent)
+	};
+
+	class ListModel final : public ListBoxModel
+	{
+	public:
+		explicit ListModel(EngineClient& c) : client(c) { }
+
+		int getNumRows() override { return (int)client.plugins.size(); }
+
+		void paintListBoxItem(int row, Graphics& g, int width, int height,
+		                      bool rowIsSelected) override
+		{
+			g.fillAll(rowIsSelected ? Colour(0xff42A2C8) : Colours::transparentBlack);
+			g.setColour(Colours::white);
+			g.setFont(FontOptions(13.0f, Font::plain));
+
+			if (isPositiveAndBelow(row, (int)client.plugins.size()))
+			{
+				const auto& p = client.plugins[(size_t)row];
+				g.drawText(
+				    String{p.name()} + "  (" + String{p.manufacturer()} + ")", 6,
+				    0, width - 12, height, Justification::centredLeft);
+			}
+		}
+
+	private:
+		EngineClient& client;
+	};
+
 	MainHostWindow& owner;
+	EngineClient& client;
+	ListBox list;
+	ListModel listModel{client};
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginListWindow)
 };
 
 //==============================================================================
-MainHostWindow::MainHostWindow()
+MainHostWindow::MainHostWindow(EngineClient& c)
     : DocumentWindow(
           JUCEApplication::getInstance()->getApplicationName(),
           LookAndFeel::getDefaultLookAndFeel().findColour(ResizableWindow::backgroundColourId),
-          DocumentWindow::allButtons)
+          DocumentWindow::allButtons),
+      client(c)
 {
-	addDefaultFormatsToManager(formatManager);
-	formatManager.addFormat(std::make_unique<InternalPluginFormat>());
-
-	for (auto* format : formatManager.getFormats())
-	{
-		if (auto* props = getAppProperties().getUserSettings())
-			format->searchPathsForPlugins(PluginListComponent::getLastSearchPath(*props, *format),
-			                              false, false);
-	}
-
-	auto safeThis = SafePointer<MainHostWindow>(this);
-	RuntimePermissions::request(
-	    RuntimePermissions::recordAudio,
-	    [safeThis](bool granted) mutable
-	    {
-		    auto savedState = getAppProperties().getUserSettings()->getXmlValue("audioDeviceState");
-		    safeThis->deviceManager.initialise(granted ? 256 : 0, 256, savedState.get(), true);
-	    });
-
 	setResizable(true, false);
 	setResizeLimits(500, 400, 10000, 10000);
 	centreWithSize(800, 600);
 
-	knownPluginList.setCustomScanner(std::make_unique<CustomPluginScanner>());
-
-	graphHolder.reset(new GraphDocumentComponent(formatManager, deviceManager, knownPluginList));
-
+	graphHolder.reset(new GraphDocumentComponent(client));
 	setContentNonOwned(graphHolder.get(), false);
 
 	setUsingNativeTitleBar(true);
@@ -175,26 +110,7 @@ MainHostWindow::MainHostWindow()
 
 	setVisible(true);
 
-	InternalPluginFormat internalFormat;
-	internalTypes = internalFormat.getAllTypes();
-
-	if (auto savedPluginList = getAppProperties().getUserSettings()->getXmlValue("pluginList"))
-		knownPluginList.recreateFromXml(*savedPluginList);
-
-	for (auto& t : internalTypes)
-		knownPluginList.addType(t);
-
-	pluginSortMethod = (KnownPluginList::SortMethod)getAppProperties().getUserSettings()->getIntValue(
-	    "pluginSortMethod", KnownPluginList::sortByManufacturer);
-
-	knownPluginList.addChangeListener(this);
-
-	if (auto* g = graphHolder->graph.get())
-		g->addChangeListener(this);
-
 	addKeyListener(getCommandManager().getKeyMappings());
-
-	Process::setPriority(Process::HighPriority);
 
 #if JUCE_MAC
 	setMacMainMenu(this);
@@ -208,10 +124,6 @@ MainHostWindow::MainHostWindow()
 MainHostWindow::~MainHostWindow()
 {
 	pluginListWindow = nullptr;
-	knownPluginList.removeChangeListener(this);
-
-	if (auto* g = graphHolder->graph.get())
-		g->removeChangeListener(this);
 
 	getAppProperties().getUserSettings()->setValue("mainWindowPos", getWindowStateAsString());
 	clearContentComponent();
@@ -230,91 +142,22 @@ void MainHostWindow::closeButtonPressed()
 	tryToQuitApplication();
 }
 
-struct AsyncQuitRetrier final : private Timer
-{
-	AsyncQuitRetrier() { startTimer(500); }
-
-	void timerCallback() override
-	{
-		stopTimer();
-		delete this;
-
-		if (auto app = JUCEApplicationBase::getInstance())
-			app->systemRequestedQuit();
-	}
-};
-
 void MainHostWindow::tryToQuitApplication()
 {
-	if (graphHolder->closeAnyOpenPluginWindows())
-	{
-		// Really important thing to note here: if the last call just deleted any plugin windows,
-		// we won't exit immediately - instead we'll use our AsyncQuitRetrier to let the message
-		// loop run for another brief moment, then try again. This will give any plugins a chance
-		// to flush any GUI events that may have been in transit before the app forces them to
-		// be unloaded
-		new AsyncQuitRetrier();
-		return;
-	}
+	ModalComponentManager::getInstance()->cancelAllModalComponents();
 
-	if (ModalComponentManager::getInstance()->cancelAllModalComponents())
-	{
-		new AsyncQuitRetrier();
-		return;
-	}
-
-	if (graphHolder != nullptr)
-	{
-		auto releaseAndQuit = [this]
-		{
-			// Some plug-ins do not want [NSApp stop] to be called
-			// before the plug-ins are not deallocated.
-			graphHolder->releaseGraph();
-
-			JUCEApplication::quit();
-		};
-
-		SafePointer<MainHostWindow> parent{this};
-		graphHolder->graph->saveIfNeededAndUserAgreesAsync(
-		    [parent, releaseAndQuit](FileBasedDocument::SaveResult r)
-		    {
-			    if (parent == nullptr)
-				    return;
-
-			    if (r == FileBasedDocument::savedOk)
-				    releaseAndQuit();
-		    });
-
-		return;
-	}
-
+	client.closeAllPluginWindows();
 	JUCEApplication::quit();
 }
 
-void MainHostWindow::changeListenerCallback(ChangeBroadcaster* changed)
+void MainHostWindow::changeListenerCallback(ChangeBroadcaster*)
 {
-	if (changed == &knownPluginList)
-	{
-		menuItemsChanged();
+}
 
-		// save the plugin list every time it gets changed, so that if we're scanning
-		// and it crashes, we've still saved the previous ones
-		if (auto savedPluginList = std::unique_ptr<XmlElement>(knownPluginList.createXml()))
-		{
-			getAppProperties().getUserSettings()->setValue("pluginList", savedPluginList.get());
-			getAppProperties().saveIfNeeded();
-		}
-	}
-	else if (graphHolder != nullptr && changed == graphHolder->graph.get())
-	{
-		auto title = JUCEApplication::getInstance()->getApplicationName();
-		auto f = graphHolder->graph->getFile();
-
-		if (f.existsAsFile())
-			title = f.getFileName() + " - " + title;
-
-		setName(title);
-	}
+void MainHostWindow::menuBarActivated(bool isActivated)
+{
+	if (isActivated && graphHolder != nullptr)
+		Component::unfocusAllComponents();
 }
 
 StringArray MainHostWindow::getMenuBarNames()
@@ -333,59 +176,19 @@ PopupMenu MainHostWindow::getMenuForIndex(int topLevelMenuIndex, const String& /
 
 	if (topLevelMenuIndex == 0)
 	{
-		// "File" menu
-		menu.addCommandItem(&getCommandManager(), CommandIDs::newFile);
-		menu.addCommandItem(&getCommandManager(), CommandIDs::open);
-
-		RecentlyOpenedFilesList recentFiles;
-		recentFiles.restoreFromString(
-		    getAppProperties().getUserSettings()->getValue("recentFilterGraphFiles"));
-
-		PopupMenu recentFilesMenu;
-		recentFiles.createPopupMenuItems(recentFilesMenu, 100, true, true);
-		menu.addSubMenu("Open recent file", recentFilesMenu);
-
-		menu.addCommandItem(&getCommandManager(), CommandIDs::save);
-		menu.addCommandItem(&getCommandManager(), CommandIDs::saveAs);
-		menu.addSeparator();
 		menu.addCommandItem(&getCommandManager(), StandardApplicationCommandIDs::quit);
 	}
 	else if (topLevelMenuIndex == 1)
 	{
-		// "Plugins" menu
 		PopupMenu pluginsMenu;
 		addPluginsToMenu(pluginsMenu);
 		menu.addSubMenu("Create Plug-in", pluginsMenu);
-		menu.addSeparator();
-		menu.addItem(250, "Delete All Plug-ins");
 	}
 	else if (topLevelMenuIndex == 2)
 	{
-		// "Options" menu
-
 		menu.addCommandItem(&getCommandManager(), CommandIDs::showPluginListEditor);
-
-		PopupMenu sortTypeMenu;
-		sortTypeMenu.addItem(200, "List Plug-ins in Default Order", true,
-		                     pluginSortMethod == KnownPluginList::defaultOrder);
-		sortTypeMenu.addItem(201, "List Plug-ins in Alphabetical Order", true,
-		                     pluginSortMethod == KnownPluginList::sortAlphabetically);
-		sortTypeMenu.addItem(202, "List Plug-ins by Category", true,
-		                     pluginSortMethod == KnownPluginList::sortByCategory);
-		sortTypeMenu.addItem(203, "List Plug-ins by Manufacturer", true,
-		                     pluginSortMethod == KnownPluginList::sortByManufacturer);
-		sortTypeMenu.addItem(204, "List Plug-ins Based on the Directory Structure", true,
-		                     pluginSortMethod == KnownPluginList::sortByFileSystemLocation);
-		menu.addSubMenu("Plug-in Menu Type", sortTypeMenu);
-
 		menu.addSeparator();
 		menu.addCommandItem(&getCommandManager(), CommandIDs::showGraphIO);
-		menu.addCommandItem(&getCommandManager(), CommandIDs::showAudioSettings);
-		menu.addCommandItem(&getCommandManager(), CommandIDs::toggleDoublePrecision);
-
-		if (autoScaleOptionAvailable)
-			menu.addCommandItem(&getCommandManager(), CommandIDs::autoScalePluginWindows);
-
 		menu.addSeparator();
 		menu.addCommandItem(&getCommandManager(), CommandIDs::aboutBox);
 	}
@@ -397,155 +200,39 @@ PopupMenu MainHostWindow::getMenuForIndex(int topLevelMenuIndex, const String& /
 	return menu;
 }
 
-void MainHostWindow::menuItemSelected(int menuItemID, int /*topLevelMenuIndex*/)
+void MainHostWindow::menuItemSelected(int /*menuItemID*/, int /*topLevelMenuIndex*/)
 {
-	if (menuItemID == 250)
-	{
-		if (graphHolder != nullptr)
-			if (auto* graph = graphHolder->graph.get())
-				graph->clear();
-	}
-	else if (menuItemID >= 100 && menuItemID < 200)
-	{
-		RecentlyOpenedFilesList recentFiles;
-		recentFiles.restoreFromString(
-		    getAppProperties().getUserSettings()->getValue("recentFilterGraphFiles"));
-
-		if (graphHolder != nullptr)
-		{
-			if (auto* graph = graphHolder->graph.get())
-			{
-				SafePointer<MainHostWindow> parent{this};
-				graph->saveIfNeededAndUserAgreesAsync(
-				    [parent, recentFiles, menuItemID](FileBasedDocument::SaveResult r)
-				    {
-					    if (parent == nullptr)
-						    return;
-
-					    if (r == FileBasedDocument::savedOk)
-						    parent->graphHolder->graph->loadFrom(
-						        recentFiles.getFile(menuItemID - 100), true);
-				    });
-			}
-		}
-	}
-	else if (menuItemID >= 200 && menuItemID < 210)
-	{
-		if (menuItemID == 200)
-			pluginSortMethod = KnownPluginList::defaultOrder;
-		else if (menuItemID == 201)
-			pluginSortMethod = KnownPluginList::sortAlphabetically;
-		else if (menuItemID == 202)
-			pluginSortMethod = KnownPluginList::sortByCategory;
-		else if (menuItemID == 203)
-			pluginSortMethod = KnownPluginList::sortByManufacturer;
-		else if (menuItemID == 204)
-			pluginSortMethod = KnownPluginList::sortByFileSystemLocation;
-
-		getAppProperties().getUserSettings()->setValue("pluginSortMethod", (int)pluginSortMethod);
-
-		menuItemsChanged();
-	}
-	else
-	{
-		if (const auto chosen = getChosenType(menuItemID))
-			createPlugin(*chosen,
-			             {proportionOfWidth(0.3f + Random::getSystemRandom().nextFloat() * 0.6f),
-			              proportionOfHeight(0.3f + Random::getSystemRandom().nextFloat() * 0.6f)});
-	}
 }
 
-void MainHostWindow::menuBarActivated(bool isActivated)
-{
-	if (isActivated && graphHolder != nullptr)
-		Component::unfocusAllComponents();
-}
-
-void MainHostWindow::createPlugin(const PluginDescriptionAndPreference& desc, Point<int> pos)
+void MainHostWindow::createPlugin(const proto::PluginDescription& plugin, Point<int> pos)
 {
 	if (graphHolder != nullptr)
-		graphHolder->createNewPlugin(desc, pos);
-}
-
-static bool containsDuplicateNames(const Array<PluginDescription>& plugins, const String& name)
-{
-	int matches = 0;
-
-	for (auto& p : plugins)
-		if (p.name == name && ++matches > 1)
-			return true;
-
-	return false;
-}
-
-static constexpr int menuIDBase = 0x324503f4;
-
-static void addToMenu(const KnownPluginList::PluginTree& tree,
-                      PopupMenu& m,
-                      const Array<PluginDescription>& allPlugins,
-                      Array<PluginDescriptionAndPreference>& addedPlugins)
-{
-	for (auto* sub : tree.subFolders)
-	{
-		PopupMenu subMenu;
-		addToMenu(*sub, subMenu, allPlugins, addedPlugins);
-
-		m.addSubMenu(sub->folder, subMenu, true, nullptr, false, 0);
-	}
-
-	auto addPlugin = [&](const auto& descriptionAndPreference, const auto& pluginName)
-	{
-		addedPlugins.add(descriptionAndPreference);
-		const auto menuID = addedPlugins.size() - 1 + menuIDBase;
-		m.addItem(menuID, pluginName, true, false);
-	};
-
-	for (auto& plugin : tree.plugins)
-	{
-		auto name = plugin.name;
-
-		if (containsDuplicateNames(tree.plugins, name))
-			name << " (" << plugin.pluginFormatName << ')';
-
-		addPlugin(PluginDescriptionAndPreference{plugin}, name);
-	}
+		graphHolder->createNewPlugin(plugin, pos);
 }
 
 void MainHostWindow::addPluginsToMenu(PopupMenu& m)
 {
-	if (graphHolder != nullptr)
+	menuPlugins.clear();
+
+	for (const auto& plugin : client.plugins)
 	{
-		int i = 0;
+		menuPlugins.push_back(plugin);
+		const auto menuID = static_cast<int>(menuPlugins.size()) - 1 + menuIDBase;
+		auto name = String{plugin.name()};
 
-		for (auto& t : internalTypes)
-			m.addItem(++i, t.name + " (" + t.pluginFormatName + ")");
+		if (!plugin.manufacturer().empty())
+			name << " (" << String{plugin.manufacturer()} << ')';
+
+		m.addItem(menuID, name, true, false);
 	}
-
-	m.addSeparator();
-
-	auto pluginDescriptions = knownPluginList.getTypes();
-
-	// This avoids showing the internal types again later on in the list
-	pluginDescriptions.removeIf(
-	    [](PluginDescription& desc)
-	    { return desc.pluginFormatName == InternalPluginFormat::getIdentifier(); });
-
-	auto tree = KnownPluginList::createTree(pluginDescriptions, pluginSortMethod);
-	pluginDescriptionsAndPreference = {};
-	addToMenu(*tree, m, pluginDescriptions, pluginDescriptionsAndPreference);
 }
 
-std::optional<PluginDescriptionAndPreference> MainHostWindow::getChosenType(const int menuID) const
+std::optional<proto::PluginDescription> MainHostWindow::getChosenType(const int menuID) const
 {
-	const auto internalIndex = menuID - 1;
+	const auto index = menuID - menuIDBase;
 
-	if (isPositiveAndBelow(internalIndex, internalTypes.size()))
-		return PluginDescriptionAndPreference{internalTypes[(size_t)internalIndex]};
-
-	const auto externalIndex = menuID - menuIDBase;
-
-	if (isPositiveAndBelow(externalIndex, pluginDescriptionsAndPreference.size()))
-		return pluginDescriptionsAndPreference[externalIndex];
+	if (isPositiveAndBelow(index, static_cast<int>(menuPlugins.size())))
+		return menuPlugins[static_cast<size_t>(index)];
 
 	return {};
 }
@@ -558,19 +245,12 @@ ApplicationCommandTarget* MainHostWindow::getNextCommandTarget()
 
 void MainHostWindow::getAllCommands(Array<CommandID>& commands)
 {
-	// this returns the set of all commands that this target can perform..
 	const CommandID ids[] = {
-	    CommandIDs::newFile,
-	    CommandIDs::open,
-	    CommandIDs::save,
-	    CommandIDs::saveAs,
 	    CommandIDs::showPluginListEditor,
 	    CommandIDs::showGraphIO,
-	    CommandIDs::showAudioSettings,
-	    CommandIDs::toggleDoublePrecision,
 	    CommandIDs::aboutBox,
 	    CommandIDs::allWindowsForward,
-	    CommandIDs::autoScalePluginWindows};
+	};
 
 	commands.addArray(ids, numElementsInArray(ids));
 }
@@ -581,27 +261,6 @@ void MainHostWindow::getCommandInfo(const CommandID commandID, ApplicationComman
 
 	switch (commandID)
 	{
-	case CommandIDs::newFile:
-		result.setInfo("New", "Creates a new filter graph file", category, 0);
-		result.defaultKeypresses.add(KeyPress('n', ModifierKeys::commandModifier, 0));
-		break;
-
-	case CommandIDs::open:
-		result.setInfo("Open...", "Opens a filter graph file", category, 0);
-		result.defaultKeypresses.add(KeyPress('o', ModifierKeys::commandModifier, 0));
-		break;
-
-	case CommandIDs::save:
-		result.setInfo("Save", "Saves the current graph to a file", category, 0);
-		result.defaultKeypresses.add(KeyPress('s', ModifierKeys::commandModifier, 0));
-		break;
-
-	case CommandIDs::saveAs:
-		result.setInfo("Save As...", "Saves a copy of the current graph to a file", category, 0);
-		result.defaultKeypresses.add(
-		    KeyPress('s', ModifierKeys::shiftModifier | ModifierKeys::commandModifier, 0));
-		break;
-
 	case CommandIDs::showPluginListEditor:
 		result.setInfo("Edit the List of Available Plug-ins...", {}, category, 0);
 		result.addDefaultKeypress('p', ModifierKeys::commandModifier);
@@ -610,15 +269,6 @@ void MainHostWindow::getCommandInfo(const CommandID commandID, ApplicationComman
 	case CommandIDs::showGraphIO:
 		result.setInfo("Edit Graph Inputs/Outputs...",
 		               "Adds, removes and edits the inputs and outputs of the graph", category, 0);
-		break;
-
-	case CommandIDs::showAudioSettings:
-		result.setInfo("Change the Audio Device Settings", {}, category, 0);
-		result.addDefaultKeypress('a', ModifierKeys::commandModifier);
-		break;
-
-	case CommandIDs::toggleDoublePrecision:
-		updatePrecisionMenuItem(result);
 		break;
 
 	case CommandIDs::aboutBox:
@@ -630,10 +280,6 @@ void MainHostWindow::getCommandInfo(const CommandID commandID, ApplicationComman
 		result.addDefaultKeypress('w', ModifierKeys::commandModifier);
 		break;
 
-	case CommandIDs::autoScalePluginWindows:
-		updateAutoScaleMenuItem(result);
-		break;
-
 	default:
 		break;
 	}
@@ -643,93 +289,18 @@ bool MainHostWindow::perform(const InvocationInfo& info)
 {
 	switch (info.commandID)
 	{
-	case CommandIDs::newFile:
-		if (graphHolder != nullptr && graphHolder->graph != nullptr)
-		{
-			SafePointer<MainHostWindow> parent{this};
-			graphHolder->graph->saveIfNeededAndUserAgreesAsync(
-			    [parent](FileBasedDocument::SaveResult r)
-			    {
-				    if (parent == nullptr)
-					    return;
-
-				    if (r == FileBasedDocument::savedOk)
-					    parent->graphHolder->graph->newDocument();
-			    });
-		}
-		break;
-
-	case CommandIDs::open:
-		if (graphHolder != nullptr && graphHolder->graph != nullptr)
-		{
-			SafePointer<MainHostWindow> parent{this};
-			graphHolder->graph->saveIfNeededAndUserAgreesAsync(
-			    [parent](FileBasedDocument::SaveResult r)
-			    {
-				    if (parent == nullptr)
-					    return;
-
-				    if (r == FileBasedDocument::savedOk)
-					    parent->graphHolder->graph->loadFromUserSpecifiedFileAsync(true,
-					                                                               [](Result) { });
-			    });
-		}
-		break;
-
-	case CommandIDs::save:
-		if (graphHolder != nullptr && graphHolder->graph != nullptr)
-			graphHolder->graph->saveAsync(true, true, nullptr);
-		break;
-
-	case CommandIDs::saveAs:
-		if (graphHolder != nullptr && graphHolder->graph != nullptr)
-			graphHolder->graph->saveAsAsync({}, true, true, true, nullptr);
-		break;
-
 	case CommandIDs::showPluginListEditor:
 		if (pluginListWindow == nullptr)
-			pluginListWindow.reset(new PluginListWindow(*this, formatManager));
+			pluginListWindow.reset(new PluginListWindow(*this, client));
 
 		pluginListWindow->toFront(true);
-		break;
-
-	case CommandIDs::showAudioSettings:
-		showAudioSettings();
 		break;
 
 	case CommandIDs::showGraphIO:
 		showGraphIOEditor();
 		break;
 
-	case CommandIDs::toggleDoublePrecision:
-		if (auto* props = getAppProperties().getUserSettings())
-		{
-			auto newIsDoublePrecision = !isDoublePrecisionProcessingEnabled();
-			props->setValue("doublePrecisionProcessing", var(newIsDoublePrecision));
-
-			ApplicationCommandInfo cmdInfo(info.commandID);
-			updatePrecisionMenuItem(cmdInfo);
-			menuItemsChanged();
-
-			if (graphHolder != nullptr)
-				graphHolder->setDoublePrecision(newIsDoublePrecision);
-		}
-		break;
-
-	case CommandIDs::autoScalePluginWindows:
-		if (auto* props = getAppProperties().getUserSettings())
-		{
-			auto newAutoScale = !isAutoScalePluginWindowsEnabled();
-			props->setValue("autoScalePluginWindows", var(newAutoScale));
-
-			ApplicationCommandInfo cmdInfo(info.commandID);
-			updateAutoScaleMenuItem(cmdInfo);
-			menuItemsChanged();
-		}
-		break;
-
 	case CommandIDs::aboutBox:
-		// TODO
 		break;
 
 	case CommandIDs::allWindowsForward:
@@ -749,48 +320,12 @@ bool MainHostWindow::perform(const InvocationInfo& info)
 	return true;
 }
 
-void MainHostWindow::showAudioSettings()
-{
-	auto* audioSettingsComp =
-	    new AudioDeviceSelectorComponent(deviceManager, 0, 256, 0, 256, true, true, true, false);
-
-	audioSettingsComp->setSize(500, 450);
-
-	DialogWindow::LaunchOptions o;
-	o.content.setOwned(audioSettingsComp);
-	o.dialogTitle = "Audio Settings";
-	o.componentToCentreAround = this;
-	o.dialogBackgroundColour = getLookAndFeel().findColour(ResizableWindow::backgroundColourId);
-	o.escapeKeyTriggersCloseButton = true;
-	o.useNativeTitleBar = false;
-	o.resizable = false;
-
-	auto* w = o.create();
-	auto safeThis = SafePointer<MainHostWindow>(this);
-
-	w->enterModalState(
-	    true,
-	    ModalCallbackFunction::create(
-	        [safeThis](int)
-	        {
-		        auto audioState = safeThis->deviceManager.createStateXml();
-
-		        getAppProperties().getUserSettings()->setValue("audioDeviceState", audioState.get());
-		        getAppProperties().getUserSettings()->saveIfNeeded();
-
-		        if (safeThis->graphHolder != nullptr)
-			        if (safeThis->graphHolder->graph != nullptr)
-				        safeThis->graphHolder->graph->graph.removeIllegalConnections();
-	        }),
-	    true);
-}
-
 void MainHostWindow::showGraphIOEditor()
 {
-	if (graphHolder == nullptr || graphHolder->graph == nullptr)
+	if (graphHolder == nullptr)
 		return;
 
-	auto* editor = new GraphIOEditor(*graphHolder->graph);
+	auto* editor = new GraphIOEditor(client.mirror, client);
 	editor->setSize(540, 420);
 
 	DialogWindow::LaunchOptions o;
@@ -804,85 +339,4 @@ void MainHostWindow::showGraphIOEditor()
 
 	auto* w = o.create();
 	w->enterModalState(true, ModalCallbackFunction::create([](int) { }), true);
-}
-
-bool MainHostWindow::isInterestedInFileDrag(const StringArray&)
-{
-	return true;
-}
-
-void MainHostWindow::fileDragEnter(const StringArray&, int, int)
-{
-}
-
-void MainHostWindow::fileDragMove(const StringArray&, int, int)
-{
-}
-
-void MainHostWindow::fileDragExit(const StringArray&)
-{
-}
-
-void MainHostWindow::filesDropped(const StringArray& files, int x, int y)
-{
-	if (graphHolder != nullptr)
-	{
-		File firstFile{files[0]};
-
-		if (files.size() == 1 && firstFile.hasFileExtension(PluginGraph::getFilenameSuffix()))
-		{
-			if (auto* g = graphHolder->graph.get())
-			{
-				SafePointer<MainHostWindow> parent;
-				g->saveIfNeededAndUserAgreesAsync(
-				    [parent, g, firstFile](FileBasedDocument::SaveResult r)
-				    {
-					    if (parent == nullptr)
-						    return;
-
-					    if (r == FileBasedDocument::savedOk)
-						    g->loadFrom(firstFile, true);
-				    });
-			}
-		}
-		else
-		{
-			OwnedArray<PluginDescription> typesFound;
-			knownPluginList.scanAndAddDragAndDroppedFiles(formatManager, files, typesFound);
-
-			auto pos = graphHolder->getLocalPoint(this, Point<int>(x, y));
-
-			for (int i = 0; i < jmin(5, typesFound.size()); ++i)
-				if (auto* desc = typesFound.getUnchecked(i))
-					createPlugin(PluginDescriptionAndPreference{*desc}, pos);
-		}
-	}
-}
-
-bool MainHostWindow::isDoublePrecisionProcessingEnabled()
-{
-	if (auto* props = getAppProperties().getUserSettings())
-		return props->getBoolValue("doublePrecisionProcessing", false);
-
-	return false;
-}
-
-bool MainHostWindow::isAutoScalePluginWindowsEnabled()
-{
-	if (auto* props = getAppProperties().getUserSettings())
-		return props->getBoolValue("autoScalePluginWindows", false);
-
-	return false;
-}
-
-void MainHostWindow::updatePrecisionMenuItem(ApplicationCommandInfo& info)
-{
-	info.setInfo("Double Floating-Point Precision Rendering", {}, "General", 0);
-	info.setTicked(isDoublePrecisionProcessingEnabled());
-}
-
-void MainHostWindow::updateAutoScaleMenuItem(ApplicationCommandInfo& info)
-{
-	info.setInfo("Auto-Scale Plug-in Windows", {}, "General", 0);
-	info.setTicked(isAutoScalePluginWindowsEnabled());
 }

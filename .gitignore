@@ -1,4 +1,6 @@
+/.agents
 /.idea
 /.qwen
 /cmake-build-*
 *.filtergraph
+*-lock.json

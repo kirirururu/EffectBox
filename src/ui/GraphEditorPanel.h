@@ -34,28 +34,31 @@
 
 #pragma once
 
+#include "EngineClient.h"
 #include "IOPanels.h"
-#include "audio/PluginGraph.h"
 
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 
 using namespace juce;
 
+using NodeID = AudioProcessorGraph::NodeID;
+
 class MainHostWindow;
 
 //==============================================================================
 /**
-    A panel that displays and edits a PluginGraph.
+    A panel that displays and edits the graph topology, working on a local
+    mirror synced with the engine process.
 */
 class GraphEditorPanel final : public Component, public ChangeListener, private Timer
 {
 public:
 	//==============================================================================
-	GraphEditorPanel(PluginGraph& graph);
+	GraphEditorPanel(GraphMirror& mirror, EngineClient& client);
 	~GraphEditorPanel() override;
 
-	void createNewPlugin(const PluginDescriptionAndPreference&, Point<int> position) const;
+	void createNewPlugin(const proto::PluginDescription&, Point<int> position) const;
 
 	void paint(Graphics&) override;
 	void resized() override;
@@ -83,7 +86,8 @@ public:
 	void timerCallback() override;
 
 	//==============================================================================
-	PluginGraph& graph;
+	GraphMirror& mirror;
+	EngineClient& client;
 
 private:
 	struct PluginComponent;
@@ -108,9 +112,10 @@ private:
 
 //==============================================================================
 /**
-    A panel that embeds a GraphEditorPanel with a midi keyboard at the bottom.
+    A panel that embeds a GraphEditorPanel.
 
-    It also manages the graph itself, and plays it.
+    It talks to the engine process through an EngineClient and keeps the side
+    panels (inputs/outputs) in sync with the mirrored graph.
 */
 class GraphDocumentComponent final : public Component,
                                      public DragAndDropTarget,
@@ -118,22 +123,16 @@ class GraphDocumentComponent final : public Component,
                                      private ChangeListener
 {
 public:
-	GraphDocumentComponent(AudioPluginFormatManager& formatManager,
-	                       AudioDeviceManager& deviceManager,
-	                       KnownPluginList& pluginList);
+	explicit GraphDocumentComponent(EngineClient& client);
 
 	~GraphDocumentComponent() override;
 
 	//==============================================================================
-	void createNewPlugin(const PluginDescriptionAndPreference&, Point<int> position) const;
-	void setDoublePrecision(bool doublePrecision);
+	void createNewPlugin(const proto::PluginDescription&, Point<int> position) const;
 	bool closeAnyOpenPluginWindows() const;
 
 	//==============================================================================
-	std::unique_ptr<PluginGraph> graph;
-
 	void resized() override;
-	void releaseGraph();
 
 	//==============================================================================
 	bool isInterestedInDragSource(const SourceDetails&) override;
@@ -143,7 +142,7 @@ public:
 	std::unique_ptr<GraphEditorPanel> graphPanel;
 
 	//==============================================================================
-	void showSidePanel(bool isSettingsPanel);
+	void showSidePanel();
 	void hideLastSidePanel();
 
 	//==============================================================================
@@ -153,11 +152,7 @@ public:
 
 private:
 	//==============================================================================
-	AudioDeviceManager& deviceManager;
-	KnownPluginList& pluginList;
-
-	AudioProcessorPlayer graphPlayer;
-	MidiOutput* midiOutput = nullptr;
+	EngineClient& client;
 
 	std::unique_ptr<IOPanelComponent> inputPanel;
 	std::unique_ptr<IOPanelComponent> outputPanel;
@@ -176,14 +171,12 @@ private:
 
 	ListBox pluginListBox;
 
-	SidePanel mobileSettingsSidePanel{"Settings", 300, true};
 	SidePanel pluginListSidePanel{"Plugins", 250, false};
 	SidePanel* lastOpenedSidePanel = nullptr;
 
 	//==============================================================================
 	void init();
 	void checkAvailableWidth();
-	void updateMidiOutput();
 	void refreshIOPanels();
 
 	//==============================================================================

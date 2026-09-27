@@ -1,0 +1,156 @@
+syntax = "proto3";
+
+import "EffectBoxTypes.proto";
+
+package proto;
+
+message GetPluginListRequest {}
+message GetPluginListResponse {
+  repeated PluginDescription plugins = 1;
+}
+
+message GetGraphSnapshotRequest {}
+message GetGraphSnapshotResponse {
+  GraphSnapshot snapshot = 1;
+}
+
+message AddPluginRequest {
+  string identifier_string = 1;
+  double x = 2;
+  double y = 3;
+}
+message AddPluginResponse {
+  bool added = 1;
+}
+
+message RemoveNodeRequest {
+  int32 node_id = 1;
+}
+message RemoveNodeResponse {
+  bool removed = 1;
+}
+
+message DisconnectNodeRequest {
+  int32 node_id = 1;
+}
+message DisconnectNodeResponse {
+  bool disconnected = 1;
+}
+
+message AddConnectionRequest {
+  Connection connection = 1;
+}
+message AddConnectionResponse {
+  bool added = 1;
+}
+
+message RemoveConnectionRequest {
+  Connection connection = 1;
+}
+message RemoveConnectionResponse {
+  bool removed = 1;
+}
+
+message SetNodePositionRequest {
+  uint32 node_id = 1;
+  double x = 2;
+  double y = 3;
+}
+message SetNodePositionResponse {}
+
+message AddIOEndpointRequest {
+  string name = 1;
+  int32 channels = 2;
+  bool is_input = 3;
+}
+message AddIOEndpointResponse {
+  string endpoint_id = 1;
+}
+
+message RemoveIOEndpointRequest {
+  string endpoint_id = 1;
+  bool is_input = 2;
+}
+message RemoveIOEndpointResponse {}
+
+message SetIOEndpointNameRequest {
+  string endpoint_id = 1;
+  string name = 2;
+  bool is_input = 3;
+}
+message SetIOEndpointNameResponse {}
+
+message SetIOEndpointChannelsRequest {
+  string endpoint_id = 1;
+  int32 channels = 2;
+  bool is_input = 3;
+}
+message SetIOEndpointChannelsResponse {}
+
+message OpenPluginWindowRequest {
+  uint32 node_id = 1;
+  PluginWindowType type = 2;
+}
+message OpenPluginWindowResponse {}
+
+message CloseAllPluginWindowsRequest {}
+message CloseAllPluginWindowsResponse {}
+
+message ToggleBypassRequest {
+  uint32 node_id = 1;
+}
+message ToggleBypassResponse {}
+
+message SavePluginStateRequest {
+  uint32 node_id = 1;
+}
+message SavePluginStateResponse {
+  string data_base64 = 1;
+}
+
+message LoadPluginStateRequest {
+  uint32 node_id = 1;
+  string data_base64 = 2;
+}
+message LoadPluginStateResponse {}
+
+message GetEventsRequest {}
+message EngineEvent {
+  message PluginGraphChanged {
+    GraphSnapshot snapshot = 1;
+  }
+  message PluginListChanged {
+    repeated PluginDescription plugins = 1;
+  }
+  message PluginCreateFailed {
+    string plugin = 1;
+    string format_name = 2;
+    string error = 3;
+  }
+  oneof event {
+    PluginGraphChanged plugin_graph_changed = 1;
+    PluginListChanged plugin_list_changed = 2;
+    PluginCreateFailed plugin_create_failed = 3;
+  }
+}
+
+service Engine {
+  rpc GetPluginList (GetPluginListRequest) returns (GetPluginListResponse);
+  rpc GetGraphSnapshot (GetGraphSnapshotRequest) returns (GetGraphSnapshotResponse);
+  rpc AddPlugin (AddPluginRequest) returns (AddPluginResponse);
+  rpc RemoveNode (RemoveNodeRequest) returns (RemoveNodeResponse);
+  rpc DisconnectNode (DisconnectNodeRequest) returns (DisconnectNodeResponse);
+  rpc AddConnection (AddConnectionRequest) returns (AddConnectionResponse);
+  rpc RemoveConnection (RemoveConnectionRequest) returns (RemoveConnectionResponse);
+  rpc SetNodePosition (SetNodePositionRequest) returns (SetNodePositionResponse);
+  rpc AddIOEndpoint (AddIOEndpointRequest) returns (AddIOEndpointResponse);
+  rpc RemoveIOEndpoint (RemoveIOEndpointRequest) returns (RemoveIOEndpointResponse);
+  rpc SetIOEndpointName (SetIOEndpointNameRequest) returns (SetIOEndpointNameResponse);
+  rpc SetIOEndpointChannels (SetIOEndpointChannelsRequest) returns (SetIOEndpointChannelsResponse);
+  rpc OpenPluginWindow (OpenPluginWindowRequest) returns (OpenPluginWindowResponse);
+  rpc CloseAllPluginWindows (CloseAllPluginWindowsRequest) returns (CloseAllPluginWindowsResponse);
+  rpc ToggleBypass (ToggleBypassRequest) returns (ToggleBypassResponse);
+  rpc SavePluginState (SavePluginStateRequest) returns (SavePluginStateResponse);
+  rpc LoadPluginState (LoadPluginStateRequest) returns (LoadPluginStateResponse);
+  rpc GetEvents (GetEventsRequest) returns (stream EngineEvent);
+}

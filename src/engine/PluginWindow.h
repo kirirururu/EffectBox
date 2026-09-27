@@ -1,5 +1,5 @@
 /*
-==============================================================================
+  ==============================================================================
 
    This file is part of the JUCE framework.
    Copyright (c) Raw Material Software Limited
@@ -34,48 +34,62 @@
 
 #pragma once
 
-#include "ui/MainHostWindow.h"
+#include "EffectBoxTypes.pb.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
 using namespace juce;
 
-class Superprocess;
-
-constexpr const char* scanModeKey = "pluginScanMode";
-
-class CustomPluginScanner final : public KnownPluginList::CustomScanner, private ChangeListener
+/**
+    A desktop window containing a plugin's GUI.
+*/
+class PluginWindow final : public DocumentWindow
 {
 public:
-	CustomPluginScanner();
+	using Type = proto::PluginWindowType;
 
-	~CustomPluginScanner() override;
+	PluginWindow(AudioProcessorGraph::Node* n,
+	             Type t,
+	             OwnedArray<PluginWindow>& windowList,
+	             KeyListener* keyListener);
 
-	bool findPluginTypesFor(AudioPluginFormat& format,
-	                        OwnedArray<PluginDescription>& result,
-	                        const String& fileOrIdentifier) override;
+	~PluginWindow() override;
 
-	void scanFinished() override;
+	void closeButtonPressed() override;
 
-	void changeListenerCallback(ChangeBroadcaster*) override;
+	float getDesktopScaleFactor() const override;
+
+	static String getLastXProp(Type type);
+	static String getLastYProp(Type type);
+	static String getOpenProp(Type type);
+
+	OwnedArray<PluginWindow>& activeWindowList;
+	const AudioProcessorGraph::Node::Ptr node;
+	const Type type;
+
+protected:
+	void moved() override;
 
 private:
-	/*  Scans for a plugin with format 'formatName' and ID 'fileOrIdentifier' using a subprocess,
-	    and adds discovered plugin descriptions to 'result'.
+	struct ProgramAudioProcessorEditor;
 
-	    Returns true on success.
+	class DecoratorConstrainer final : public BorderedComponentBoundsConstrainer
+	{
+	public:
+		explicit DecoratorConstrainer(DocumentWindow& windowIn);
 
-	    Failure indicates that the subprocess is unrecoverable and should be terminated.
-	*/
-	bool addPluginDescriptions(const String& formatName,
-	                           const String& fileOrIdentifier,
-	                           OwnedArray<PluginDescription>& result);
+		ComponentBoundsConstrainer* getWrappedConstrainer() const override;
+		BorderSize<int> getAdditionalBorder() const override;
 
-	void handleChange();
+	private:
+		DocumentWindow& window;
+	};
 
-	std::unique_ptr<Superprocess> superprocess;
+	DecoratorConstrainer constrainer{*this};
 
-	std::atomic<bool> scanInProcess{true};
+	static AudioProcessorEditor* createProcessorEditor(AudioProcessor& processor, Type type);
 
-	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CustomPluginScanner)
+	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginWindow)
 };
+
+String getFormatSuffix(const AudioProcessor* plugin);

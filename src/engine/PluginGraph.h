@@ -39,22 +39,9 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 
+#include <functional>
+
 using namespace juce;
-
-//==============================================================================
-/** A type that encapsulates a PluginDescription and some preferences regarding
-    how plugins of that description should be instantiated.
-*/
-struct PluginDescriptionAndPreference
-{
-	PluginDescriptionAndPreference() = default;
-
-	explicit PluginDescriptionAndPreference(PluginDescription pd) : pluginDescription(std::move(pd))
-	{
-	}
-
-	PluginDescription pluginDescription;
-};
 
 //==============================================================================
 /**
@@ -70,7 +57,7 @@ struct GraphIOEndpoint
 
 	Uuid id;
 	String name;
-	int numChannels = 1;
+	uint32 numChannels = 1;
 };
 
 //==============================================================================
@@ -87,7 +74,8 @@ public:
 	//==============================================================================
 	using NodeID = AudioProcessorGraph::NodeID;
 
-	void addPlugin(const PluginDescriptionAndPreference&, Point<double>);
+	void addPlugin(const String& identifierString, Point<double>);
+	void addPlugin(const PluginDescription&, Point<double>);
 
 	AudioProcessorGraph::Node::Ptr getNodeForName(const String& name) const;
 
@@ -140,6 +128,9 @@ public:
 	std::vector<GraphIOEndpoint> inputs;
 	std::vector<GraphIOEndpoint> outputs;
 
+	/** Called (message thread) when async plugin instantiation fails. */
+	std::function<void(const PluginDescription&, const String&)> onPluginCreateFailed;
+
 protected:
 	String getDocumentTitle() override;
 	Result loadDocument(const File& file) override;
@@ -152,13 +143,15 @@ private:
 	AudioPluginFormatManager& formatManager;
 	KnownPluginList& knownPlugins;
 	OwnedArray<PluginWindow> activePluginWindows;
-	ScopedMessageBox messageBox;
 
 	NodeID lastUID;
 	NodeID getNextUID() noexcept;
 
 	void createNodeFromXml(const XmlElement&);
-	void addPluginCallback(std::unique_ptr<AudioPluginInstance>, const String& error, Point<double>);
+	void addPluginCallback(std::unique_ptr<AudioPluginInstance>,
+	                       const String& error,
+	                       Point<double> pos,
+	                       const PluginDescription& description);
 
 	//==============================================================================
 	std::vector<GraphIOEndpoint>& ioVector(bool isInput) { return isInput ? inputs : outputs; }

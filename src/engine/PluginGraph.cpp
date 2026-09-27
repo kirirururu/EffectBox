@@ -32,12 +32,17 @@
   ==============================================================================
 */
 
-#include <JuceHeader.h>
-
-#include "InternalPlugins.h"
 #include "PluginGraph.h"
-#include "ui/GraphEditorPanel.h"
-#include "ui/MainHostWindow.h"
+#include "InternalPlugins.h"
+
+bool shouldAutoScalePlugin(const PluginDescription&);
+ApplicationCommandManager& getCommandManager();
+ApplicationProperties& getAppProperties();
+
+namespace CommandIDs
+{
+extern const int showAudioSettings;
+} // namespace CommandIDs
 
 static std::unique_ptr<ScopedDPIAwarenessDisabler>
 makeDPIAwarenessDisablerForPlugin(const PluginDescription& desc)
@@ -87,26 +92,33 @@ AudioProcessorGraph::Node::Ptr PluginGraph::getNodeForName(const String& name) c
 	return nullptr;
 }
 
-void PluginGraph::addPlugin(const PluginDescriptionAndPreference& desc, Point<double> pos)
+void PluginGraph::addPlugin(const String& identifierString, Point<double> pos)
+{
+	if (auto plugin = knownPlugins.getTypeForIdentifierString(identifierString))
+		addPlugin(*plugin, pos);
+}
+
+void PluginGraph::addPlugin(const PluginDescription& desc, Point<double> pos)
 {
 	std::shared_ptr<ScopedDPIAwarenessDisabler> dpiDisabler =
-	    makeDPIAwarenessDisablerForPlugin(desc.pluginDescription);
+	    makeDPIAwarenessDisablerForPlugin(desc);
 
 	formatManager.createPluginInstanceAsync(
-	    desc.pluginDescription, graph.getSampleRate(), graph.getBlockSize(),
-	    [this, pos, dpiDisabler](std::unique_ptr<AudioPluginInstance> instance, const String& error)
-	    { addPluginCallback(std::move(instance), error, pos); });
+	    desc, graph.getSampleRate(), graph.getBlockSize(),
+	    [this, desc, pos,
+	     dpiDisabler](std::unique_ptr<AudioPluginInstance> instance, const String& error)
+	    { addPluginCallback(std::move(instance), error, pos, desc); });
 }
 
 void PluginGraph::addPluginCallback(std::unique_ptr<AudioPluginInstance> instance,
                                     const String& error,
-                                    Point<double> pos)
+                                    Point<double> pos,
+                                    const PluginDescription& description)
 {
 	if (instance == nullptr)
 	{
-		auto options = MessageBoxOptions::makeOptionsOk(MessageBoxIconType::WarningIcon,
-		                                                TRANS("Couldn't create plugin"), error);
-		messageBox = AlertWindow::showScopedAsync(options, nullptr);
+		if (onPluginCreateFailed != nullptr)
+			onPluginCreateFailed(description, error);
 	}
 	else
 	{
@@ -250,7 +262,7 @@ PluginWindow* PluginGraph::getOrCreateWindowFor(AudioProcessorGraph::Node* node,
 
 			if (!plugin->hasEditor() && description.pluginFormatName == "Internal")
 			{
-				getCommandManager().invokeDirectly(CommandIDs::showAudioSettings, false);
+				// getCommandManager().invokeDirectly(CommandIDs::showAudioSettings, false);
 				return nullptr;
 			}
 
@@ -290,10 +302,10 @@ void PluginGraph::newDocument()
 
 	jassert(internalFormat.getAllTypes().size() > 3);
 
-	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[0]}, {0.1, 0.5});
-	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[1]}, {0.1, 0.25});
-	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[2]}, {0.9, 0.5});
-	addPlugin(PluginDescriptionAndPreference{internalFormat.getAllTypes()[3]}, {0.9, 0.25});
+	addPlugin(internalFormat.getAllTypes()[0], {0.1, 0.5});
+	addPlugin(internalFormat.getAllTypes()[1], {0.1, 0.25});
+	addPlugin(internalFormat.getAllTypes()[2], {0.9, 0.5});
+	addPlugin(internalFormat.getAllTypes()[3], {0.9, 0.25});
 
 	seedDefaultIO();
 
@@ -427,7 +439,7 @@ static XmlElement* createNodeXml(AudioProcessorGraph::Node* const node) noexcept
 		e->setAttribute("x", node->properties["x"].toString());
 		e->setAttribute("y", node->properties["y"].toString());
 
-		for (int i = 0; i < (int)PluginWindow::Type::numTypes; ++i)
+		for (int i = 0; i < proto::PluginWindowType_ARRAYSIZE; ++i)
 		{
 			auto type = (PluginWindow::Type)i;
 
@@ -469,24 +481,24 @@ static XmlElement* createNodeXml(AudioProcessorGraph::Node* const node) noexcept
 
 void PluginGraph::createNodeFromXml(const XmlElement& xml)
 {
-	PluginDescriptionAndPreference pd;
+	PluginDescription pd;
 
 	for (auto* e : xml.getChildIterator())
 	{
-		if (pd.pluginDescription.loadFromXml(*e))
+		if (pd.loadFromXml(*e))
 			break;
 	}
 
 	auto createInstanceWithFallback = [&]() -> std::unique_ptr<AudioPluginInstance>
 	{
-		auto createInstance = [this](const PluginDescriptionAndPreference& description)
+		auto createInstance = [this](const PluginDescription& description)
 		    -> std::unique_ptr<AudioPluginInstance>
 		{
 			String errorMessage;
 
-			auto localDpiDisabler = makeDPIAwarenessDisablerForPlugin(description.pluginDescription);
+			auto localDpiDisabler = makeDPIAwarenessDisablerForPlugin(description);
 
-			auto instance = formatManager.createPluginInstance(description.pluginDescription,
+			auto instance = formatManager.createPluginInstance(description,
 			                                                   graph.getSampleRate(),
 			                                                   graph.getBlockSize(), errorMessage);
 
@@ -499,7 +511,7 @@ void PluginGraph::createNodeFromXml(const XmlElement& xml)
 		const auto allFormats = formatManager.getFormats();
 		const auto matchingFormat =
 		    std::find_if(allFormats.begin(), allFormats.end(), [&](const AudioPluginFormat* f)
-		                 { return f->getName() == pd.pluginDescription.pluginFormatName; });
+		                 { return f->getName() == pd.pluginFormatName; });
 
 		if (matchingFormat == allFormats.end())
 			return nullptr;
@@ -507,12 +519,12 @@ void PluginGraph::createNodeFromXml(const XmlElement& xml)
 		const auto plugins = knownPlugins.getTypesForFormat(**matchingFormat);
 		const auto matchingPlugin =
 		    std::find_if(plugins.begin(), plugins.end(), [&](const PluginDescription& desc)
-		                 { return pd.pluginDescription.uniqueId == desc.uniqueId; });
+		                 { return pd.uniqueId == desc.uniqueId; });
 
 		if (matchingPlugin == plugins.end())
 			return nullptr;
 
-		return createInstance(PluginDescriptionAndPreference{*matchingPlugin});
+		return createInstance(*matchingPlugin);
 	};
 
 	if (auto instance = createInstanceWithFallback())
@@ -541,7 +553,7 @@ void PluginGraph::createNodeFromXml(const XmlElement& xml)
 			node->properties.set("x", xml.getDoubleAttribute("x"));
 			node->properties.set("y", xml.getDoubleAttribute("y"));
 
-			for (int i = 0; i < (int)PluginWindow::Type::numTypes; ++i)
+			for (int i = 0; i < proto::PluginWindowType_ARRAYSIZE; ++i)
 			{
 				auto type = (PluginWindow::Type)i;
 
@@ -602,7 +614,7 @@ std::unique_ptr<XmlElement> PluginGraph::createXml() const
 			auto* el = io->createNewChildElement("INPUT");
 			el->setAttribute("id", e.id.toString());
 			el->setAttribute("name", e.name);
-			el->setAttribute("channels", e.numChannels);
+			el->setAttribute("channels", static_cast<int>(e.numChannels));
 		}
 
 		for (const auto& e : outputs)
@@ -610,7 +622,7 @@ std::unique_ptr<XmlElement> PluginGraph::createXml() const
 			auto* el = io->createNewChildElement("OUTPUT");
 			el->setAttribute("id", e.id.toString());
 			el->setAttribute("name", e.name);
-			el->setAttribute("channels", e.numChannels);
+			el->setAttribute("channels", static_cast<int>(e.numChannels));
 		}
 	}
 

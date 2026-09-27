@@ -22,7 +22,8 @@ public:
 		g.setFont(FontOptions(13.0f, Font::plain));
 
 		const auto& e = eps[static_cast<size_t>(row)];
-		const auto text = e.name + "   (" + (e.numChannels == 2 ? "Stereo" : "Mono") + ")";
+		const auto text =
+		    String{e.name()} + "   (" + (e.num_channels() == 2 ? "Stereo" : "Mono") + ")";
 		g.drawText(text, 6, 0, width - 12, height, Justification::centredLeft);
 
 		g.setColour(Colours::black.withAlpha(0.4f));
@@ -50,7 +51,7 @@ static void selectSingleRow(ListBox& list, int row)
 }
 
 //==============================================================================
-GraphIOEditor::GraphIOEditor(PluginGraph& g) : graph(g)
+GraphIOEditor::GraphIOEditor(GraphMirror& g, EngineClient& c) : mirror(g), client(c)
 {
 	inputModel.reset(new IOListModel(*this, true));
 	outputModel.reset(new IOListModel(*this, false));
@@ -98,7 +99,7 @@ GraphIOEditor::GraphIOEditor(PluginGraph& g) : graph(g)
 
 	setSize(540, 420);
 
-	if (!graph.inputs.empty())
+	if (!mirror.model().inputs().empty())
 	{
 		selectSingleRow(inputList, 0);
 		rowSelected(true, 0);
@@ -128,8 +129,8 @@ void GraphIOEditor::updateEditingControls()
 	const auto& e = eps[static_cast<size_t>(currentIndex)];
 
 	updatingUI = true;
-	nameEditor.setText(e.name, NotificationType::dontSendNotification);
-	channelsCombo.setSelectedItemIndex(e.numChannels == 2 ? 1 : 0,
+	nameEditor.setText(String{e.name()}, NotificationType::dontSendNotification);
+	channelsCombo.setSelectedItemIndex(e.num_channels() == 2 ? 1 : 0,
 	                                   NotificationType::dontSendNotification);
 	updatingUI = false;
 }
@@ -139,7 +140,7 @@ void GraphIOEditor::addEndpoint(bool isInput)
 	const int count = static_cast<int>(endpoints(isInput).size());
 	const String name = (isInput ? "Input " : "Output ") + String(count + 1);
 
-	graph.addIOEndpoint(name, 1, isInput);
+	client.addIOEndpoint(name, 1, isInput);
 
 	auto* lb = isInput ? &inputList : &outputList;
 	lb->updateContent();
@@ -157,8 +158,8 @@ void GraphIOEditor::removeSelected()
 	if (!isPositiveAndBelow(currentIndex, eps.size()))
 		return;
 
-	const Uuid id = eps[static_cast<size_t>(currentIndex)].id;
-	graph.removeIOEndpoint(id, currentIsInput);
+	const Uuid id(eps[static_cast<size_t>(currentIndex)].id());
+	client.removeIOEndpoint(id, currentIsInput);
 
 	auto* lb = currentIsInput ? &inputList : &outputList;
 	lb->updateContent();
@@ -186,8 +187,8 @@ void GraphIOEditor::textEditorTextChanged(TextEditor& e)
 	if (!isPositiveAndBelow(currentIndex, eps.size()))
 		return;
 
-	const Uuid id = eps[static_cast<size_t>(currentIndex)].id;
-	graph.setIOEndpointName(id, nameEditor.getText(), currentIsInput);
+	const Uuid id(eps[static_cast<size_t>(currentIndex)].id());
+	client.setIOEndpointName(id, nameEditor.getText(), currentIsInput);
 	(currentIsInput ? inputList : outputList).repaint();
 }
 
@@ -202,8 +203,8 @@ void GraphIOEditor::comboBoxChanged(ComboBox* c)
 		return;
 
 	const int numChannels = (channelsCombo.getSelectedItemIndex() == 1) ? 2 : 1;
-	const Uuid id = eps[static_cast<size_t>(currentIndex)].id;
-	graph.setIOEndpointChannels(id, numChannels, currentIsInput);
+	const Uuid id(eps[static_cast<size_t>(currentIndex)].id());
+	client.setIOEndpointChannels(id, numChannels, currentIsInput);
 	(currentIsInput ? inputList : outputList).repaint();
 }
 

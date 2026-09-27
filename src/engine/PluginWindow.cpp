@@ -114,17 +114,17 @@ float PluginWindow::getDesktopScaleFactor() const
 
 String PluginWindow::getLastXProp(Type type)
 {
-	return "uiLastX_" + getTypeName(type);
+	return "uiLastX_" + proto::PluginWindowType_Name(type);
 }
 
 String PluginWindow::getLastYProp(Type type)
 {
-	return "uiLastY_" + getTypeName(type);
+	return "uiLastY_" + proto::PluginWindowType_Name(type);
 }
 
 String PluginWindow::getOpenProp(Type type)
 {
-	return "uiopen_" + getTypeName(type);
+	return "uiopen_" + proto::PluginWindowType_Name(type);
 }
 
 void PluginWindow::moved()
@@ -136,53 +136,33 @@ void PluginWindow::moved()
 AudioProcessorEditor* PluginWindow::createProcessorEditor(AudioProcessor& processor,
 														  PluginWindow::Type type)
 {
-	if (type == PluginWindow::Type::normal)
+	if (type == PluginWindow::Type::PLUGIN_WINDOW_TYPE_NORMAL)
 	{
 		if (processor.hasEditor())
 			if (auto* ui = processor.createEditorAndMakeActive())
 				return ui;
 
-		type = PluginWindow::Type::generic;
+		type = PluginWindow::Type::PLUGIN_WINDOW_TYPE_GENERIC;
 	}
 
-	if (type == PluginWindow::Type::generic)
+	if (type == PluginWindow::Type::PLUGIN_WINDOW_TYPE_GENERIC)
 	{
 		auto* result = new GenericAudioProcessorEditor(processor);
 		result->setResizeLimits(200, 300, 1'000, 10'000);
 		return result;
 	}
 
-	if (type == PluginWindow::Type::programs)
+	if (type == PluginWindow::Type::PLUGIN_WINDOW_TYPE_PROGRAMS)
 		return new ProgramAudioProcessorEditor(processor);
 
 	// if (type == PluginWindow::Type::audioIO)
 	// 	return new IOConfigurationWindow(processor);
 
-	if (type == PluginWindow::Type::debug)
+	if (type == PluginWindow::Type::PLUGIN_WINDOW_TYPE_DEBUGGER)
 		return new PluginDebugWindow(processor);
 
 	jassertfalse;
 	return {};
-}
-
-String PluginWindow::getTypeName(Type type)
-{
-	switch (type)
-	{
-	case Type::normal:
-		return "Normal";
-	case Type::generic:
-		return "Generic";
-	case Type::programs:
-		return "Programs";
-	case Type::audioIO:
-		return "IO";
-	case Type::debug:
-		return "Debug";
-	case Type::numTypes:
-	default:
-		return {};
-	}
 }
 
 //==============================================================================

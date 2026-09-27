@@ -34,6 +34,10 @@
 
 #include "CustomPluginScanner.h"
 
+const char* processUID = "effectboxengine";
+
+ApplicationProperties& getAppProperties();
+
 class Superprocess final : private ChildProcessCoordinator
 {
 public:

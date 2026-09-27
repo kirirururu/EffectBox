@@ -1,6 +1,8 @@
 #pragma once
 
-#include "audio/PluginGraph.h"
+#include "EngineClient.h"
+
+#include <juce_gui_basics/juce_gui_basics.h>
 
 using namespace juce;
 
@@ -22,7 +24,7 @@ class GraphIOEditor final : public Component,
 {
 public:
 	//==============================================================================
-	explicit GraphIOEditor(PluginGraph& graph);
+	GraphIOEditor(GraphMirror& mirror, EngineClient& client);
 
 	//==============================================================================
 	void resized() override;
@@ -46,12 +48,13 @@ private:
 
 	void updateEditingControls();
 
-	const std::vector<GraphIOEndpoint>& endpoints(bool isInput) const
+	const ::google::protobuf::RepeatedPtrField<proto::IOEndpoint>& endpoints(bool isInput) const
 	{
-		return isInput ? graph.inputs : graph.outputs;
+		return isInput ? mirror.model().inputs() : mirror.model().outputs();
 	}
 
-	PluginGraph& graph;
+	GraphMirror& mirror;
+	EngineClient& client;
 
 	ListBox inputList, outputList;
 	std::unique_ptr<IOListModel> inputModel, outputModel;

@@ -1,0 +1,71 @@
+syntax = "proto3";
+package proto;
+
+enum PluginWindowType {
+  PLUGIN_WINDOW_TYPE_NORMAL = 0;
+  PLUGIN_WINDOW_TYPE_GENERIC = 1;
+  PLUGIN_WINDOW_TYPE_PROGRAMS = 2;
+  PLUGIN_WINDOW_TYPE_AUDIO_IO = 3;
+  PLUGIN_WINDOW_TYPE_DEBUGGER = 4;
+}
+
+message PluginDescription {
+  string identifier_string = 1;
+  string name = 2;
+  string descriptive_name = 3;
+  string format_name = 4;
+  string category = 5;
+  string manufacturer = 6;
+  string version = 7;
+  string file = 8;
+  int64 last_file_mod_time = 9;
+  int64 last_info_update_time = 10;
+  int32 unique_id = 11;
+  bool is_instrument = 12;
+  uint32 num_input_channels = 13;
+  uint32 num_output_channels = 14;
+  bool has_shared_container = 15;
+}
+
+message BusInfo {
+  string name = 1;
+  string layout = 2;
+}
+
+message ProcessorInfo {
+  int32 num_ins = 1;
+  int32 num_outs = 2;
+  bool accepts_midi = 3;
+  bool produces_midi = 4;
+  repeated BusInfo input_buses = 5;
+  repeated BusInfo output_buses = 6;
+}
+
+message Node {
+  uint32 uid = 1;
+  double x = 2;
+  double y = 3;
+  optional PluginDescription plugin = 4;
+  ProcessorInfo processor = 5;
+  bool bypassed = 6;
+}
+
+message Connection {
+  uint32 source_node = 1;
+  int32 source_channel = 2;
+  uint32 destination_node = 3;
+  int32 destination_channel = 4;
+}
+
+message IOEndpoint {
+  string id = 1;
+  string name = 2;
+  uint32 num_channels = 3;
+}
+
+message GraphSnapshot {
+  repeated Node nodes = 1;
+  repeated Connection connections = 2;
+  repeated IOEndpoint inputs = 3;
+  repeated IOEndpoint outputs = 4;
+}
