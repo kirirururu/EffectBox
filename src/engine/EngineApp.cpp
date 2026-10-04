@@ -5,6 +5,7 @@
 #include <memory>
 
 namespace CommandIDs {
+extern const int showAudioSettings;
 const int showAudioSettings = 0x30200;
 } // namespace CommandIDs
 
@@ -197,9 +198,8 @@ public:
 		}
 
 		PropertiesFile::Options options;
-		options.applicationName = "EffectBox Engine";
-		options.filenameSuffix = "settings";
-		options.osxLibrarySubFolder = "Preferences";
+		options.applicationName = "EffectBox";
+		options.filenameSuffix = "engine_settings";
 
 		appProperties = std::make_unique<ApplicationProperties>();
 		appProperties->setStorageParameters(options);
@@ -247,10 +247,10 @@ public:
 			knownPluginList.addType(t);
 
 		commandManager.registerAllCommandsForTarget(&engineCommands);
-
-		// defer graph seeding so plugin instantiation happens in the normal
-		// event loop, not during initialisation
-		MessageManager::callAsync([this] { graph->newDocument(); });
+		// the engine has no windows: registerAllCommandsForTarget only fills the
+		// command list, so without an explicit first target the manager would
+		// look for the active component and find nothing
+		commandManager.setFirstCommandTarget(&engineCommands);
 	}
 
 	void shutdown() override

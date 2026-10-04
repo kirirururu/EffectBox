@@ -114,6 +114,56 @@ message LoadPluginStateRequest {
 }
 message LoadPluginStateResponse {}
 
+message NewGraphRequest {}
+message NewGraphResponse {
+  bool ok = 1;
+}
+
+message LoadGraphRequest {
+  string file = 1;
+}
+message LoadGraphResponse {
+  bool ok = 1;
+  string error = 2;
+}
+
+message SaveGraphRequest {
+  string file = 1;
+}
+message SaveGraphResponse {
+  bool ok = 1;
+  string error = 2;
+}
+
+message ClearGraphRequest {}
+message ClearGraphResponse {
+  bool ok = 1;
+}
+
+message ShowAudioSettingsRequest {}
+message ShowAudioSettingsResponse {}
+
+message SetDoublePrecisionRequest {
+  bool enabled = 1;
+}
+message SetDoublePrecisionResponse {}
+
+message SetAutoScalePluginWindowsRequest {
+  bool enabled = 1;
+}
+message SetAutoScalePluginWindowsResponse {}
+
+message GetSettingsRequest {}
+message GetSettingsResponse {
+  bool double_precision = 1;
+  bool auto_scale_plugin_windows = 2;
+}
+
+message ScanPluginsRequest {}
+message ScanPluginsResponse {
+  bool ok = 1;
+}
+
 message GetEventsRequest {}
 message EngineEvent {
   message PluginGraphChanged {
@@ -152,5 +202,14 @@ service Engine {
   rpc ToggleBypass (ToggleBypassRequest) returns (ToggleBypassResponse);
   rpc SavePluginState (SavePluginStateRequest) returns (SavePluginStateResponse);
   rpc LoadPluginState (LoadPluginStateRequest) returns (LoadPluginStateResponse);
+  rpc NewGraph (NewGraphRequest) returns (NewGraphResponse);
+  rpc LoadGraph (LoadGraphRequest) returns (LoadGraphResponse);
+  rpc SaveGraph (SaveGraphRequest) returns (SaveGraphResponse);
+  rpc ClearGraph (ClearGraphRequest) returns (ClearGraphResponse);
+  rpc ShowAudioSettings (ShowAudioSettingsRequest) returns (ShowAudioSettingsResponse);
+  rpc SetDoublePrecision (SetDoublePrecisionRequest) returns (SetDoublePrecisionResponse);
+  rpc SetAutoScalePluginWindows (SetAutoScalePluginWindowsRequest) returns (SetAutoScalePluginWindowsResponse);
+  rpc GetSettings (GetSettingsRequest) returns (GetSettingsResponse);
+  rpc ScanPlugins (ScanPluginsRequest) returns (ScanPluginsResponse);
   rpc GetEvents (GetEventsRequest) returns (stream EngineEvent);
 }

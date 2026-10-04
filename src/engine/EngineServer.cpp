@@ -4,11 +4,19 @@
 
 #include <grpcpp/server_builder.h>
 
+ApplicationCommandManager& getCommandManager();
+ApplicationProperties& getAppProperties();
+
+namespace CommandIDs
+{
+extern const int showAudioSettings;
+} // namespace CommandIDs
+
 static proto::PluginDescription toProto(const PluginDescription& plugin)
 {
 	proto::PluginDescription result;
 	result.set_identifier_string(plugin.createIdentifierString().toStdString());
-	result.set_name(plugin.pluginFormatName.toStdString());
+	result.set_name(plugin.name.toStdString());
 	result.set_descriptive_name(plugin.descriptiveName.toStdString());
 	result.set_format_name(plugin.pluginFormatName.toStdString());
 	result.set_category(plugin.category.toStdString());
@@ -101,6 +109,11 @@ static proto::GraphSnapshot toProto(const PluginGraph& graph)
 		out.set_num_channels(output.numChannels);
 	}
 
+	if (graph.getFile().existsAsFile())
+		result.set_file(graph.getFile().getFullPathName().toStdString());
+
+	result.set_dirty(graph.hasChangedSinceSaved());
+
 	return result;
 }
 
@@ -123,6 +136,11 @@ EngineServer::EngineServer(PluginGraph& g,
 	(void)formatManager;
 	graph.addChangeListener(this);
 	graph.graph.addChangeListener(this);
+	pluginList.addChangeListener(this);
+
+	// gRPC does not remove the socket file itself, so a stale one left over
+	// from a previous crash would block the bind; clear it before starting
+	File{String{getSocketPath()}}.deleteFile();
 
 	grpc::ServerBuilder builder;
 	builder.AddListeningPort("unix:" + getSocketPath(), grpc::InsecureServerCredentials());
@@ -138,13 +156,39 @@ EngineServer::~EngineServer() noexcept
 {
 	graph.removeChangeListener(this);
 	graph.graph.removeChangeListener(this);
+	pluginList.removeChangeListener(this);
+
+	if (scanThread != nullptr)
+		scanThread->stopThread(5000);
 
 	if (server != nullptr)
 		server->Shutdown();
+
+	// remove the now-dead socket so a restart is not confused by a stale file
+	File{String{getSocketPath()}}.deleteFile();
 }
 
-void EngineServer::changeListenerCallback(ChangeBroadcaster*)
+void EngineServer::changeListenerCallback(ChangeBroadcaster* source)
 {
+	if (source == &pluginList)
+	{
+		// persist the list on every change, so that if a scan crashes the
+		// previously found plug-ins are not lost
+		if (auto savedPluginList = pluginList.createXml())
+		{
+			getAppProperties().getUserSettings()->setValue("pluginList", savedPluginList.get());
+			getAppProperties().saveIfNeeded();
+		}
+
+		proto::EngineEvent event;
+
+		for (const auto& plugin : pluginList.getTypes())
+			*event.mutable_plugin_list_changed()->add_plugins() = toProto(plugin);
+
+		sendEvent(std::move(event));
+		return;
+	}
+
 	proto::EngineEvent event;
 	*event.mutable_plugin_graph_changed()->mutable_snapshot() = toProto(graph);
 	sendEvent(std::move(event));
@@ -219,11 +263,17 @@ grpc::Status EngineServer::AddPlugin(grpc::ServerContext*,
                                      const proto::AddPluginRequest* request,
                                      proto::AddPluginResponse* response)
 {
+	// copy the request data out: the proto object is owned by gRPC and is
+	// destroyed as soon as this handler returns, before the async callback runs
+	const auto identifier = request->identifier_string();
+	const auto x = request->x();
+	const auto y = request->y();
+
 	onMessageThread(
-	    [this, request]
+	    [this, identifier, x, y]
 	    {
-		    if (pluginList.getTypeForIdentifierString(request->identifier_string()) != nullptr)
-			    graph.addPlugin(request->identifier_string(), {request->x(), request->y()});
+		    if (pluginList.getTypeForIdentifierString(identifier) != nullptr)
+			    graph.addPlugin(identifier, {x, y});
 	    });
 
 	response->set_added(true);
@@ -234,11 +284,12 @@ grpc::Status EngineServer::RemoveNode(grpc::ServerContext*,
                                       const proto::RemoveNodeRequest* request,
                                       proto::RemoveNodeResponse* response)
 {
+	const auto nodeID = request->node_id();
+
 	onMessageThread(
-	    [this, request]
+	    [this, nodeID]
 	    {
-		    graph.graph.removeNode(
-		        toNodeID(static_cast<std::uint32_t>(request->node_id())));
+		    graph.graph.removeNode(toNodeID(static_cast<std::uint32_t>(nodeID)));
 	    });
 
 	response->set_removed(true);
@@ -249,11 +300,12 @@ grpc::Status EngineServer::DisconnectNode(grpc::ServerContext*,
                                           const proto::DisconnectNodeRequest* request,
                                           proto::DisconnectNodeResponse* response)
 {
+	const auto nodeID = request->node_id();
+
 	onMessageThread(
-	    [this, request]
+	    [this, nodeID]
 	    {
-		    graph.graph.disconnectNode(
-		        toNodeID(static_cast<std::uint32_t>(request->node_id())));
+		    graph.graph.disconnectNode(toNodeID(static_cast<std::uint32_t>(nodeID)));
 	    });
 
 	response->set_disconnected(true);
@@ -264,13 +316,14 @@ grpc::Status EngineServer::AddConnection(grpc::ServerContext*,
                                          const proto::AddConnectionRequest* request,
                                          proto::AddConnectionResponse* response)
 {
+	const auto connection = request->connection();
+
 	onMessageThread(
-	    [this, request]
+	    [this, connection]
 	    {
-		    const auto& c = request->connection();
 		    graph.graph.addConnection(
-		        {{toNodeID(c.source_node()), c.source_channel()},
-		         {toNodeID(c.destination_node()), c.destination_channel()}});
+		        {{toNodeID(connection.source_node()), connection.source_channel()},
+		         {toNodeID(connection.destination_node()), connection.destination_channel()}});
 	    });
 
 	response->set_added(true);
@@ -281,13 +334,14 @@ grpc::Status EngineServer::RemoveConnection(grpc::ServerContext*,
                                             const proto::RemoveConnectionRequest* request,
                                             proto::RemoveConnectionResponse* response)
 {
+	const auto connection = request->connection();
+
 	onMessageThread(
-	    [this, request]
+	    [this, connection]
 	    {
-		    const auto& c = request->connection();
 		    graph.graph.removeConnection(
-		        {{toNodeID(c.source_node()), c.source_channel()},
-		         {toNodeID(c.destination_node()), c.destination_channel()}});
+		        {{toNodeID(connection.source_node()), connection.source_channel()},
+		         {toNodeID(connection.destination_node()), connection.destination_channel()}});
 	    });
 
 	response->set_removed(true);
@@ -298,10 +352,14 @@ grpc::Status EngineServer::SetNodePosition(grpc::ServerContext*,
                                            const proto::SetNodePositionRequest* request,
                                            proto::SetNodePositionResponse*)
 {
+	const auto nodeID = request->node_id();
+	const auto x = request->x();
+	const auto y = request->y();
+
 	onMessageThread(
-	    [this, request]
+	    [this, nodeID, x, y]
 	    {
-		    graph.setNodePosition(toNodeID(request->node_id()), {request->x(), request->y()});
+		    graph.setNodePosition(toNodeID(nodeID), {x, y});
 	    });
 
 	return grpc::Status::OK;
@@ -327,10 +385,13 @@ grpc::Status EngineServer::RemoveIOEndpoint(grpc::ServerContext*,
                                             const proto::RemoveIOEndpointRequest* request,
                                             proto::RemoveIOEndpointResponse*)
 {
+	const auto endpointID = request->endpoint_id();
+	const auto isInput = request->is_input();
+
 	onMessageThread(
-	    [this, request]
+	    [this, endpointID, isInput]
 	    {
-		    graph.removeIOEndpoint(Uuid{request->endpoint_id()}, request->is_input());
+		    graph.removeIOEndpoint(Uuid{endpointID}, isInput);
 	    });
 
 	return grpc::Status::OK;
@@ -340,10 +401,14 @@ grpc::Status EngineServer::SetIOEndpointName(grpc::ServerContext*,
                                              const proto::SetIOEndpointNameRequest* request,
                                              proto::SetIOEndpointNameResponse*)
 {
+	const auto endpointID = request->endpoint_id();
+	const auto name = request->name();
+	const auto isInput = request->is_input();
+
 	onMessageThread(
-	    [this, request]
+	    [this, endpointID, name, isInput]
 	    {
-		    graph.setIOEndpointName(Uuid{request->endpoint_id()}, request->name(), request->is_input());
+		    graph.setIOEndpointName(Uuid{endpointID}, name, isInput);
 	    });
 
 	return grpc::Status::OK;
@@ -353,11 +418,14 @@ grpc::Status EngineServer::SetIOEndpointChannels(grpc::ServerContext*,
                                                  const proto::SetIOEndpointChannelsRequest* request,
                                                  proto::SetIOEndpointChannelsResponse*)
 {
+	const auto endpointID = request->endpoint_id();
+	const auto channels = request->channels();
+	const auto isInput = request->is_input();
+
 	onMessageThread(
-	    [this, request]
+	    [this, endpointID, channels, isInput]
 	    {
-		    graph.setIOEndpointChannels(Uuid{request->endpoint_id()}, request->channels(),
-		                                request->is_input());
+		    graph.setIOEndpointChannels(Uuid{endpointID}, channels, isInput);
 	    });
 
 	return grpc::Status::OK;
@@ -367,11 +435,14 @@ grpc::Status EngineServer::OpenPluginWindow(grpc::ServerContext*,
                                             const proto::OpenPluginWindowRequest* request,
                                             proto::OpenPluginWindowResponse*)
 {
+	const auto nodeID = request->node_id();
+	const auto type = request->type();
+
 	onMessageThread(
-	    [this, request]
+	    [this, nodeID, type]
 	    {
-		    if (auto* node = graph.graph.getNodeForId(toNodeID(request->node_id())))
-			    graph.getOrCreateWindowFor(node, static_cast<PluginWindow::Type>(request->type()));
+		    if (auto* node = graph.graph.getNodeForId(toNodeID(nodeID)))
+			    graph.getOrCreateWindowFor(node, static_cast<PluginWindow::Type>(type));
 	    });
 
 	return grpc::Status::OK;
@@ -389,10 +460,12 @@ grpc::Status EngineServer::ToggleBypass(grpc::ServerContext*,
                                         const proto::ToggleBypassRequest* request,
                                         proto::ToggleBypassResponse*)
 {
+	const auto nodeID = request->node_id();
+
 	onMessageThread(
-	    [this, request]
+	    [this, nodeID]
 	    {
-		    if (auto* node = graph.graph.getNodeForId(toNodeID(request->node_id())))
+		    if (auto* node = graph.graph.getNodeForId(toNodeID(nodeID)))
 			    node->setBypassed(!node->isBypassed());
 	    });
 
@@ -428,14 +501,17 @@ grpc::Status EngineServer::LoadPluginState(grpc::ServerContext*,
                                            const proto::LoadPluginStateRequest* request,
                                            proto::LoadPluginStateResponse*)
 {
+	const auto nodeID = request->node_id();
+	const auto dataBase64 = request->data_base64();
+
 	onMessageThread(
-	    [this, request]
+	    [this, nodeID, dataBase64]
 	    {
-		    if (auto* node = graph.graph.getNodeForId(toNodeID(request->node_id())))
+		    if (auto* node = graph.graph.getNodeForId(toNodeID(nodeID)))
 			    if (auto* processor = node->getProcessor())
 			    {
 				    MemoryBlock block;
-				    block.fromBase64Encoding(request->data_base64());
+				    block.fromBase64Encoding(dataBase64);
 
 				    if (block.getSize() > 0)
 					    processor->setStateInformation(block.getData(),
@@ -443,6 +519,148 @@ grpc::Status EngineServer::LoadPluginState(grpc::ServerContext*,
 			    }
 	    });
 
+	return grpc::Status::OK;
+}
+
+grpc::Status EngineServer::NewGraph(grpc::ServerContext*,
+                                    const proto::NewGraphRequest*,
+                                    proto::NewGraphResponse* response)
+{
+	onMessageThread([this] { graph.newDocument(); });
+	response->set_ok(true);
+	return grpc::Status::OK;
+}
+
+grpc::Status EngineServer::LoadGraph(grpc::ServerContext*,
+                                     const proto::LoadGraphRequest* request,
+                                     proto::LoadGraphResponse* response)
+{
+	auto result =
+	    runOnMessageThread([this, request] { return graph.loadFrom(File{request->file()}, false, false); })
+	        .get();
+
+	response->set_ok(result.wasOk());
+	response->set_error(result.getErrorMessage().toStdString());
+	return grpc::Status::OK;
+}
+
+grpc::Status EngineServer::SaveGraph(grpc::ServerContext*,
+                                     const proto::SaveGraphRequest* request,
+                                     proto::SaveGraphResponse* response)
+{
+	// saveAsAsync invokes the callback synchronously when run on the message thread
+	auto ok = runOnMessageThread(
+	               [this, request]
+	               {
+		                bool saved = false;
+
+		                graph.saveAsAsync(
+		                    File{request->file()}, false, false, false,
+		                    [&saved](FileBasedDocument::SaveResult r)
+		                    { saved = (r == FileBasedDocument::savedOk); });
+
+		                return saved;
+	               })
+	               .get();
+
+	response->set_ok(ok);
+	if (!ok)
+		response->set_error("Couldn't write to the file");
+
+	return grpc::Status::OK;
+}
+
+grpc::Status EngineServer::ClearGraph(grpc::ServerContext*,
+                                      const proto::ClearGraphRequest*,
+                                      proto::ClearGraphResponse* response)
+{
+	onMessageThread([this] { graph.clear(); });
+	response->set_ok(true);
+	return grpc::Status::OK;
+}
+
+grpc::Status EngineServer::ShowAudioSettings(grpc::ServerContext*,
+                                             const proto::ShowAudioSettingsRequest*,
+                                             proto::ShowAudioSettingsResponse*)
+{
+	onMessageThread([]
+	                   {
+	                       getCommandManager().invokeDirectly(CommandIDs::showAudioSettings, false);
+	                   });
+
+	return grpc::Status::OK;
+}
+
+grpc::Status EngineServer::SetDoublePrecision(grpc::ServerContext*,
+                                              const proto::SetDoublePrecisionRequest* request,
+                                              proto::SetDoublePrecisionResponse*)
+{
+	const auto enabled = request->enabled();
+
+	onMessageThread(
+	    [this, enabled]
+	    {
+		    player.setDoublePrecisionProcessing(enabled);
+		    getAppProperties().getUserSettings()->setValue("doublePrecisionProcessing", enabled);
+	    });
+
+	return grpc::Status::OK;
+}
+
+grpc::Status EngineServer::SetAutoScalePluginWindows(grpc::ServerContext*,
+                                                     const proto::SetAutoScalePluginWindowsRequest* request,
+                                                     proto::SetAutoScalePluginWindowsResponse*)
+{
+	const auto enabled = request->enabled();
+
+	onMessageThread(
+	    [enabled]
+	    {
+		    getAppProperties().getUserSettings()->setValue("autoScalePluginWindows", enabled);
+	    });
+
+	return grpc::Status::OK;
+}
+
+grpc::Status EngineServer::GetSettings(grpc::ServerContext*,
+                                       const proto::GetSettingsRequest*,
+                                       proto::GetSettingsResponse* response)
+{
+	runOnMessageThread(
+	    [response]
+	    {
+		    auto* settings = getAppProperties().getUserSettings();
+		    response->set_double_precision(settings->getBoolValue("doublePrecisionProcessing", false));
+		    response->set_auto_scale_plugin_windows(
+		        settings->getBoolValue("autoScalePluginWindows", false));
+	    })
+	    .get();
+
+	return grpc::Status::OK;
+}
+
+grpc::Status EngineServer::ScanPlugins(grpc::ServerContext*,
+                                       const proto::ScanPluginsRequest*,
+                                       proto::ScanPluginsResponse* response)
+{
+	// the scan runs on its own thread; re-entrancy is rejected, the results are
+	// pushed to the client as PluginListChanged events
+	const auto started =
+	    runOnMessageThread(
+	        [this]
+	        {
+		        if (scanThread != nullptr)
+			        return false;
+
+		        scanThread = std::make_unique<PluginScanThread>(pluginList, formatManager);
+		        scanThread->onFinished = [this] { scanThread = nullptr; };
+		        scanThread->startThread();
+
+		        return true;
+	        })
+	        .get();
+
+	response->set_ok(started);
 	return grpc::Status::OK;
 }
 
@@ -457,29 +675,10 @@ grpc::Status EngineServer::GetEvents(grpc::ServerContext* context,
 			return grpc::Status(grpc::StatusCode::ALREADY_EXISTS, "A client is already connected");
 
 		clientConnected = true;
-	}
 
-	{
-		auto initial = runOnMessageThread(
-		    [this]
-		    {
-			    std::vector<proto::EngineEvent> events;
-
-			    proto::EngineEvent graphEvent;
-			    *graphEvent.mutable_plugin_graph_changed()->mutable_snapshot() = toProto(graph);
-			    events.push_back(std::move(graphEvent));
-
-			    proto::EngineEvent listEvent;
-			    for (const auto& plugin : pluginList.getTypes())
-				    *listEvent.mutable_plugin_list_changed()->add_plugins() = toProto(plugin);
-			    events.push_back(std::move(listEvent));
-
-			    return events;
-		    });
-
-		for (const auto& event : initial.get())
-			if (!writer->Write(event))
-				break;
+		// the client fetches the current graph snapshot and plug-in list
+		// explicitly, so events queued before it connected are stale
+		pendingEvents.clear();
 	}
 
 	while (!context->IsCancelled())

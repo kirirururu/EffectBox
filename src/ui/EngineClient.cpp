@@ -118,22 +118,93 @@ void EngineClient::stop()
 void EngineClient::run()
 {
 	// the socket file appears once the engine's gRPC server is up
+	// (a socket is not a regular file, so we use exists(), not existsAsFile())
 	auto socketPath = getSocketPath();
 
-	while (!threadShouldExit() && !File{String{socketPath}}.existsAsFile())
-		Thread::sleep(50);
+	while (!threadShouldExit())
+	{
+		while (!threadShouldExit() && !File{String{socketPath}}.exists())
+			Thread::sleep(50);
 
-	if (threadShouldExit())
-		return;
+		if (threadShouldExit())
+			return;
 
-	pumpEvents();
+		if (pumpEvents())
+			return; // served a real connection (or are shutting down)
+
+		// stale socket: the file exists but no live engine answers. Do not
+		// delete it -- the starting engine clears and re-creates its own
+		// socket, so deleting here would race with it. Just wait and re-probe.
+		Thread::sleep(100);
+	}
 }
 
-void EngineClient::pumpEvents()
+bool EngineClient::pumpEvents()
 {
 	eventsContext = std::make_unique<grpc::ClientContext>();
 	proto::GetEventsRequest request;
 	auto reader = stub->GetEvents(eventsContext.get(), request);
+
+	// fetch the initial state explicitly; the event stream only carries
+	// subsequent changes. The plug-in list call doubles as a liveness probe:
+	// a real engine behind the socket must answer, so a failure here means the
+	// file is stale (left over from a dead engine) and should be deleted.
+	{
+		grpc::ClientContext context;
+
+		proto::GetPluginListRequest listRequest;
+		proto::GetPluginListResponse listResponse;
+
+		const auto listStatus = stub->GetPluginList(&context, listRequest, &listResponse);
+
+		if (!listStatus.ok())
+		{
+			eventsContext->TryCancel();
+			eventsContext = nullptr;
+			return false;
+		}
+
+		auto plugins =
+		    std::vector<proto::PluginDescription>(listResponse.plugins().begin(),
+		                                           listResponse.plugins().end());
+
+		MessageManager::callAsync(
+		    [alive = alive, this, plugins = std::move(plugins)]
+		    {
+			    if (*alive)
+				    this->plugins = std::move(plugins);
+		    });
+
+		// a ClientContext is single-use, so take a fresh one for the snapshot
+		grpc::ClientContext snapshotContext;
+		proto::GetGraphSnapshotRequest snapshotRequest;
+		proto::GetGraphSnapshotResponse snapshotResponse;
+
+		if (stub->GetGraphSnapshot(&snapshotContext, snapshotRequest, &snapshotResponse).ok())
+		{
+			auto snapshot = std::move(*snapshotResponse.mutable_snapshot());
+
+			MessageManager::callAsync(
+			    [alive = alive, this, snapshot = std::move(snapshot)]
+			    {
+				    if (*alive)
+					    mirror.applySnapshot(std::move(snapshot));
+			    });
+		}
+	}
+
+	if (onConnected != nullptr)
+	{
+		auto callback = std::move(onConnected);
+		onConnected = nullptr;
+
+		MessageManager::callAsync(
+		    [alive = alive, callback = std::move(callback)]
+		    {
+			    if (*alive)
+				    callback();
+		    });
+	}
 
 	proto::EngineEvent event;
 
@@ -151,10 +222,11 @@ void EngineClient::pumpEvents()
 	}
 
 	if (threadShouldExit())
-		return; // shutting down, the stream was cancelled by us
+		return true; // shutting down, the stream was cancelled by us
 
 	// the stream ended on its own: the engine is gone
 	notifyEngineLost();
+	return true;
 }
 
 void EngineClient::handleEvent(proto::EngineEvent event)
@@ -168,6 +240,10 @@ void EngineClient::handleEvent(proto::EngineEvent event)
 	case proto::EngineEvent::kPluginListChanged:
 		plugins.assign(event.plugin_list_changed().plugins().begin(),
 		               event.plugin_list_changed().plugins().end());
+
+		if (onPluginListChanged != nullptr)
+			onPluginListChanged();
+
 		break;
 
 	case proto::EngineEvent::kPluginCreateFailed:
@@ -203,6 +279,132 @@ void EngineClient::notifyEngineLost()
 				    callback();
 		    });
 	}
+}
+
+//==============================================================================
+void EngineClient::newGraph()
+{
+	grpc::ClientContext context;
+
+	proto::NewGraphRequest request;
+	proto::NewGraphResponse response;
+	stub->NewGraph(&context, request, &response);
+}
+
+bool EngineClient::loadGraph(const String& path, String& error)
+{
+	grpc::ClientContext context;
+
+	proto::LoadGraphRequest request;
+	request.set_file(path.toStdString());
+
+	proto::LoadGraphResponse response;
+
+	if (!stub->LoadGraph(&context, request, &response).ok())
+	{
+		error = "Couldn't reach the engine";
+		return false;
+	}
+
+	if (!response.ok())
+	{
+		error = String{response.error()};
+		return false;
+	}
+
+	return true;
+}
+
+bool EngineClient::saveGraph(const String& path, String& error)
+{
+	grpc::ClientContext context;
+
+	proto::SaveGraphRequest request;
+	request.set_file(path.toStdString());
+
+	proto::SaveGraphResponse response;
+
+	if (!stub->SaveGraph(&context, request, &response).ok())
+	{
+		error = "Couldn't reach the engine";
+		return false;
+	}
+
+	if (!response.ok())
+	{
+		error = String{response.error()};
+		return false;
+	}
+
+	return true;
+}
+
+void EngineClient::clearGraph()
+{
+	grpc::ClientContext context;
+
+	proto::ClearGraphRequest request;
+	proto::ClearGraphResponse response;
+	stub->ClearGraph(&context, request, &response);
+}
+
+EngineSettings EngineClient::getSettings()
+{
+	grpc::ClientContext context;
+
+	proto::GetSettingsRequest request;
+	proto::GetSettingsResponse response;
+	stub->GetSettings(&context, request, &response);
+
+	EngineSettings settings;
+	settings.doublePrecision = response.double_precision();
+	settings.autoScalePluginWindows = response.auto_scale_plugin_windows();
+	return settings;
+}
+
+//==============================================================================
+void EngineClient::showAudioSettings()
+{
+	grpc::ClientContext context;
+
+	proto::ShowAudioSettingsRequest request;
+	proto::ShowAudioSettingsResponse response;
+	stub->ShowAudioSettings(&context, request, &response);
+}
+
+void EngineClient::setDoublePrecision(bool enabled)
+{
+	grpc::ClientContext context;
+
+	proto::SetDoublePrecisionRequest request;
+	request.set_enabled(enabled);
+
+	proto::SetDoublePrecisionResponse response;
+	stub->SetDoublePrecision(&context, request, &response);
+}
+
+void EngineClient::setAutoScalePluginWindows(bool enabled)
+{
+	grpc::ClientContext context;
+
+	proto::SetAutoScalePluginWindowsRequest request;
+	request.set_enabled(enabled);
+
+	proto::SetAutoScalePluginWindowsResponse response;
+	stub->SetAutoScalePluginWindows(&context, request, &response);
+}
+
+int EngineClient::scanPlugins()
+{
+	grpc::ClientContext context;
+
+	proto::ScanPluginsRequest request;
+	proto::ScanPluginsResponse response;
+
+	if (!stub->ScanPlugins(&context, request, &response).ok())
+		return 0;
+
+	return response.ok() ? 1 : 2;
 }
 
 //==============================================================================

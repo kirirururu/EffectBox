@@ -68,4 +68,6 @@ message GraphSnapshot {
   repeated Connection connections = 2;
   repeated IOEndpoint inputs = 3;
   repeated IOEndpoint outputs = 4;
+  string file = 5;
+  bool dirty = 6;
 }

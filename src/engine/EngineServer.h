@@ -15,6 +15,8 @@
 
 using namespace juce;
 
+ApplicationProperties& getAppProperties();
+
 /**
     Listens on a UNIX-domain socket and serves the graph editor protocol to a
     single connected client (the GUI application).
@@ -86,6 +88,33 @@ public:
 	grpc::Status LoadPluginState(grpc::ServerContext* context,
 	                             const proto::LoadPluginStateRequest* request,
 	                             proto::LoadPluginStateResponse* response) override;
+	grpc::Status NewGraph(grpc::ServerContext* context,
+	                      const proto::NewGraphRequest* request,
+	                      proto::NewGraphResponse* response) override;
+	grpc::Status LoadGraph(grpc::ServerContext* context,
+	                       const proto::LoadGraphRequest* request,
+	                       proto::LoadGraphResponse* response) override;
+	grpc::Status SaveGraph(grpc::ServerContext* context,
+	                       const proto::SaveGraphRequest* request,
+	                       proto::SaveGraphResponse* response) override;
+	grpc::Status ClearGraph(grpc::ServerContext* context,
+	                        const proto::ClearGraphRequest* request,
+	                        proto::ClearGraphResponse* response) override;
+	grpc::Status ShowAudioSettings(grpc::ServerContext* context,
+	                               const proto::ShowAudioSettingsRequest* request,
+	                               proto::ShowAudioSettingsResponse* response) override;
+	grpc::Status SetDoublePrecision(grpc::ServerContext* context,
+	                                const proto::SetDoublePrecisionRequest* request,
+	                                proto::SetDoublePrecisionResponse* response) override;
+	grpc::Status SetAutoScalePluginWindows(grpc::ServerContext* context,
+	                                       const proto::SetAutoScalePluginWindowsRequest* request,
+	                                       proto::SetAutoScalePluginWindowsResponse* response) override;
+	grpc::Status GetSettings(grpc::ServerContext* context,
+	                         const proto::GetSettingsRequest* request,
+	                         proto::GetSettingsResponse* response) override;
+	grpc::Status ScanPlugins(grpc::ServerContext* context,
+	                         const proto::ScanPluginsRequest* request,
+	                         proto::ScanPluginsResponse* response) override;
 	grpc::Status GetEvents(grpc::ServerContext* context,
 	                       const proto::GetEventsRequest* request,
 	                       grpc::ServerWriter<proto::EngineEvent>* writer) override;
@@ -140,6 +169,47 @@ private:
 		}
 	}
 
+	/** Scans the plug-in directories of all registered formats on a
+	    background thread; results are broadcast as PluginListChanged events. */
+	class PluginScanThread final : public Thread
+	{
+	public:
+		PluginScanThread(KnownPluginList& list, AudioPluginFormatManager& formats)
+		    : Thread("PluginScanThread"),
+		      list(list),
+		      formats(formats)
+		{
+		}
+
+		void run() override
+		{
+			for (auto* format : formats.getFormats())
+			{
+				auto path = format->getDefaultLocationsToSearch();
+
+				if (auto* settings = getAppProperties().getUserSettings())
+					path = PluginListComponent::getLastSearchPath(*settings, *format);
+
+				PluginDirectoryScanner scanner(list, *format, path, true, File{}, true);
+				String name;
+
+				while (!threadShouldExit() && scanner.scanNextFile(false, name))
+					;
+			}
+
+			// let the server release the thread on the message thread
+			if (onFinished != nullptr)
+				MessageManager::callAsync(onFinished);
+		}
+
+		/** Invoked (message thread) when the scan has finished. */
+		std::function<void()> onFinished;
+
+	private:
+		KnownPluginList& list;
+		AudioPluginFormatManager& formats;
+	};
+
 	void onMessageThread(std::function<void()> function);
 	void sendEvent(proto::EngineEvent event);
 
@@ -150,6 +220,7 @@ private:
 	AudioPluginFormatManager& formatManager;
 
 	std::unique_ptr<grpc::Server> server;
+	std::unique_ptr<PluginScanThread> scanThread;
 
 	std::mutex eventMutex;
 	std::condition_variable eventCondition;

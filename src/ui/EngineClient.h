@@ -30,6 +30,9 @@ public:
 
 	const proto::GraphSnapshot& model() const { return data; }
 
+	/** True if the engine's graph has unsaved changes. */
+	bool isDirty() const { return data.dirty(); }
+
 	const proto::Node* findNode(std::uint32_t uid) const;
 	bool isConnected(const proto::Connection& connection) const;
 
@@ -42,6 +45,13 @@ private:
 };
 
 //==============================================================================
+/** Engine-side settings fetched once after connecting. */
+struct EngineSettings
+{
+	bool doublePrecision = false;
+	bool autoScalePluginWindows = false;
+};
+
 /** Talks to the engine process: spawns it, keeps the socket, and dispatches
     events onto the message thread.
 */
@@ -56,6 +66,33 @@ public:
 	void stop();
 
 	bool isConnected() const noexcept { return connected; }
+
+	/** Called (message thread) once the event stream is up and the initial
+	    plugin list and graph snapshot have been applied. */
+	std::function<void()> onConnected;
+
+	/** Called (message thread) after the engine's plugin list has changed. */
+	std::function<void()> onPluginListChanged;
+
+	//==============================================================================
+	// Graph document
+	void newGraph();
+	bool loadGraph(const String& path, String& error);
+	bool saveGraph(const String& path, String& error);
+	void clearGraph();
+	EngineSettings getSettings();
+
+	//==============================================================================
+	// Engine options
+	void showAudioSettings();
+	void setDoublePrecision(bool enabled);
+	void setAutoScalePluginWindows(bool enabled);
+
+	/** Asks the engine to scan the plug-in directories.
+
+	    Returns 0 if the engine couldn't be reached, 1 if the scan was
+	    started, 2 if a scan is already in progress. */
+	int scanPlugins();
 
 	//==============================================================================
 	// Graph topology
@@ -94,7 +131,12 @@ public:
 private:
 	//==============================================================================
 	void run() override;
-	void pumpEvents();
+
+	// Serves the event stream and fetches the initial state. Returns false if
+	// the socket file turned out to be stale (a leftover of a dead engine that
+	// never answers), so the caller can delete it and wait for a fresh one.
+	bool pumpEvents();
+
 	void handleEvent(proto::EngineEvent event);
 	void notifyEngineLost();
 

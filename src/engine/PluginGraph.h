@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include "Common.h"
 #include "PluginWindow.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -109,9 +110,6 @@ public:
 	//==============================================================================
 	std::unique_ptr<XmlElement> createXml() const;
 	void restoreFromXml(const XmlElement&);
-
-	static const char* getFilenameSuffix() { return ".filtergraph"; }
-	static const char* getFilenameWildcard() { return "*.filtergraph"; }
 
 	//==============================================================================
 	void newDocument();

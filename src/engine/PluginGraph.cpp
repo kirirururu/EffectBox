@@ -52,11 +52,10 @@ makeDPIAwarenessDisablerForPlugin(const PluginDescription& desc)
 
 //==============================================================================
 PluginGraph::PluginGraph(AudioPluginFormatManager& fm, KnownPluginList& kpl)
-    : FileBasedDocument(getFilenameSuffix(), getFilenameWildcard(), "Load a graph", "Save a graph"),
+    : FileBasedDocument(GRAPH_FILE_SUFFIX, String{"*"} + GRAPH_FILE_SUFFIX, "Load a graph", "Save a graph"),
       formatManager(fm),
       knownPlugins(kpl)
 {
-	newDocument();
 	graph.addListener(this);
 }
 

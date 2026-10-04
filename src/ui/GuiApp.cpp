@@ -18,6 +18,39 @@ public:
 
 		engineClient = std::make_unique<EngineClient>();
 
+		// a graph file can be passed on the command line (as in the old, single
+		// process version of the app); it's opened once the engine is connected
+		File fileToOpen;
+
+		for (const auto& param : getCommandLineParameterArray())
+		{
+			const auto candidate =
+			    File::getCurrentWorkingDirectory().getChildFile(param);
+
+			if (candidate.existsAsFile())
+			{
+				fileToOpen = candidate;
+				break;
+			}
+		}
+
+		engineClient->onConnected = [this, fileToOpen]
+		{
+			if (mainWindow == nullptr)
+				return;
+
+			mainWindow->handleEngineConnected();
+
+			if (fileToOpen.existsAsFile())
+				mainWindow->openGraphFile(fileToOpen);
+		};
+
+		engineClient->onPluginListChanged = [this]
+		{
+			if (mainWindow != nullptr)
+				mainWindow->pluginListChanged();
+		};
+
 		// TODO: application crashes when showing error message
 		engineClient->onPluginCreateFailed = [](const proto::PluginDescription& plugin, const String& error)
 		{
@@ -68,6 +101,14 @@ public:
 			mainWindow->tryToQuitApplication();
 		else
 			JUCEApplicationBase::quit();
+	}
+
+	bool backButtonPressed() override
+	{
+		if (mainWindow != nullptr && mainWindow->graphHolder != nullptr)
+			mainWindow->graphHolder->hideLastSidePanel();
+
+		return true;
 	}
 
 	const String getApplicationName() override { return "Juce Plug-In Host"; }
